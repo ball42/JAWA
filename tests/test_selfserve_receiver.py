@@ -233,3 +233,61 @@ def test_selfserve_entry_cannot_be_fired_through_hooks(
     resp = client.post("/hooks/reset-ipad", json={"webhook": {}})
     assert resp.status_code == 401
     assert fake_popen.calls == []
+
+
+# --- POST: run ---
+
+
+def test_post_runs_script_with_the_contract_payload(
+    client, jawa_env, fake_popen
+):
+    entry = _make_service(jawa_env)
+    resp = client.post("/selfserve/reset-ipad", data=GOOD_QUERY)
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Done. Put iPad-042 down." in body
+    assert len(fake_popen.calls) == 1
+    argv = fake_popen.calls[0]
+    assert argv[0] == entry["script"]
+    payload = json.loads(argv[1])
+    assert payload["webhook"]["webhookEvent"] == "SelfServe"
+    assert payload["webhook"]["name"] == "reset-ipad"
+    assert payload["event"]["jssID"] == 42
+    assert payload["event"]["udid"] == GOOD_QUERY["udid"]
+    assert payload["event"]["deviceType"] == "mobile"
+    assert payload["event"]["params"] == {"DEVICENAME": "iPad-042"}
+    assert "token" not in argv[1]
+
+
+def test_post_failure_renders_failure_message_with_500(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    fake_popen.return_code = 20
+    resp = client.post("/selfserve/reset-ipad", data=GOOD_QUERY)
+    assert resp.status_code == 500
+    body = resp.get_data(as_text=True)
+    assert "Could not reset. Tell IT." in body
+    assert "script ran" not in body  # never the script output
+
+
+def test_post_with_bad_token_is_401_and_runs_nothing(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    resp = client.post(
+        "/selfserve/reset-ipad", data=dict(GOOD_QUERY, token="nope")
+    )
+    assert resp.status_code == 401
+    assert fake_popen.calls == []
+
+
+def test_post_without_id_is_400_and_runs_nothing(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    data = dict(GOOD_QUERY)
+    del data["id"]
+    resp = client.post("/selfserve/reset-ipad", data=data)
+    assert resp.status_code == 400
+    assert fake_popen.calls == []

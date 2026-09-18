@@ -44,6 +44,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 from flask import Blueprint, render_template, request
 
 from bin import data_store, logger
+from webhook.jawa_receiver import ScriptExecutionError, script_results
 
 logthis = logger.setup_child_logger("jawa", "selfserve_receiver")
 
@@ -202,4 +203,41 @@ def service_page(service_name: str):
         jss_id=jss_id,
         udid=udid,
         params=params,
+    )
+
+
+@blueprint.route("/selfserve/<service_name>", methods=["POST"])
+def service_run(service_name: str):
+    logthis.info(f"Incoming POST at /selfserve/{service_name} ...")
+    try:
+        service = _authorize(service_name, request.form)
+        jss_id, udid, params = parse_device_request(request.form)
+    except SelfServeRequestError as err:
+        return err.message, err.status
+
+    payload = build_selfserve_payload(
+        service, jss_id, udid, params, _remote_address()
+    )
+    strings = _page_strings(service, params)
+    logthis.info(
+        f"Self-serve {service['name']} confirmed for device {jss_id} "
+        f"from {payload['event']['remoteAddress']}; running script..."
+    )
+    try:
+        script_results(payload, service)
+    except ScriptExecutionError as err:
+        logthis.error(
+            f"Self-serve {service['name']} failed for device {jss_id}: "
+            f"{err}"
+        )
+        return (
+            render_template(
+                "selfserve/result.html",
+                strings=strings,
+                succeeded=False,
+            ),
+            500,
+        )
+    return render_template(
+        "selfserve/result.html", strings=strings, succeeded=True
     )
