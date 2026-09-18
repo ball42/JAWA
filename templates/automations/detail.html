@@ -34,6 +34,12 @@
         </div>
         {% endif %}
 
+        {% if automation.jamf_id and auto_type == 'selfserve' %}
+        <div class="overflow-auto text-break" style="max-height: 10vh">
+            <b>View in Jamf</b>: <a href="{{ session_url }}/mobileDeviceConfigurationProfiles.html?id={{ automation.jamf_id }}" target="_blank">Open the web clip profile in Jamf Pro</a>
+        </div>
+        {% endif %}
+
         <div class="d-flex justify-content-center mt-4 gap-2">
             <a href="/automations/{{ auto_type }}" class="btn btn-secondary btn-action">Back</a>
             {% if handler.supports_edit %}

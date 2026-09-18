@@ -1,8 +1,11 @@
 """Console side of self-serve automations: the type handler."""
 
 import io
+import plistlib
+import xml.etree.ElementTree as ET
 
 import pytest
+import requests
 
 from bin import data_store
 from views._type_handlers import get_handler
@@ -165,3 +168,148 @@ def test_delete_retires_script_and_removes_record(
 )
 def test_console_pages_render(logged_in_client, jawa_env, path):
     assert logged_in_client.get(path).status_code == 200
+
+
+class _ProfileJamf:
+    """Captures profile calls and answers like Jamf Pro Classic API."""
+
+    def __init__(self, fake_response_cls, fake_post, status=201):
+        self._fake_response_cls = fake_response_cls
+        self._fake_post = fake_post
+        self.posts = []
+        self.puts = []
+        self.status = status
+
+    def post(self, url, **kwargs):
+        if "/JSSResource/mobiledeviceconfigurationprofiles/id/0" in url:
+            self.posts.append((url, kwargs))
+            return self._fake_response_cls(
+                {},
+                status_code=self.status,
+                text="<mobile_device_configuration_profile><id>55</id>"
+                "</mobile_device_configuration_profile>",
+            )
+        return self._fake_post(url, **kwargs)
+
+    def put(self, url, **kwargs):
+        self.puts.append((url, kwargs))
+        return self._fake_response_cls({}, status_code=201, text="<id>55</id>")
+
+
+@pytest.fixture()
+def profile_jamf(monkeypatch, fake_jamf, jamf_fake_http):
+    fake_response_cls, fake_post = jamf_fake_http
+    jamf = _ProfileJamf(fake_response_cls, fake_post)
+    monkeypatch.setattr(requests, "post", jamf.post)
+    monkeypatch.setattr(requests, "put", jamf.put)
+    return jamf
+
+
+def test_plist_is_a_managed_web_clip_with_the_service_url():
+    entry = {"name": "reset-ipad", "page_title": "Reset {DEVICENAME}?"}
+    url = "https://jawa.example.test/selfserve/reset-ipad?token=T&id=$JSSID"
+    plist = plistlib.loads(ssh.build_webclip_plist(entry, url).encode())
+    assert plist["PayloadType"] == "Configuration"
+    clip = plist["PayloadContent"][0]
+    assert clip["PayloadType"] == "com.apple.webClip.managed"
+    assert clip["URL"] == url
+    assert clip["Label"] == "Reset ?"  # placeholders stripped
+    assert clip["IsRemovable"] is False
+    assert clip["FullScreen"] is True
+    assert (
+        clip["PayloadIdentifier"]
+        == "com.jamf.jawa.selfserve.reset-ipad.webclip"
+    )
+
+
+def test_profile_xml_is_well_formed_and_unscoped():
+    entry = {"name": "reset-ipad", "page_title": "Reset"}
+    root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/?a=1&b=2"))
+    assert root.tag == "mobile_device_configuration_profile"
+    assert root.findtext("general/name") == "JAWA Self-Serve: Reset"
+    assert root.findtext("scope/all_mobile_devices") == "false"
+    payloads = root.findtext("general/payloads")
+    assert "com.apple.webClip.managed" in payloads
+    assert "a=1&amp;b=2" in payloads  # escaped inside the plist string
+
+
+def test_create_with_checkbox_creates_profile_and_stores_id(
+    logged_in_client, jawa_env, profile_jamf
+):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry["jamf_id"] == "55"
+    assert entry["profile_status"] == "created"
+    assert len(profile_jamf.posts) == 1
+    url, kwargs = profile_jamf.posts[0]
+    assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+    assert entry["token"] in kwargs["data"]
+
+
+def test_create_without_checkbox_skips_jamf(
+    logged_in_client, jawa_env, profile_jamf
+):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry["profile_status"] == "skipped"
+    assert profile_jamf.posts == []
+
+
+def test_profile_failure_still_creates_the_service(
+    logged_in_client, jawa_env, profile_jamf
+):
+    profile_jamf.status = 409
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry is not None
+    assert entry["jamf_id"] is None
+    assert entry["profile_status"] == "failed"
+
+
+def test_edit_updates_the_profile_when_one_exists(
+    logged_in_client, jawa_env, profile_jamf
+):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    form = _create_form(page_title="Wipe it")
+    del form["new_file"]
+    logged_in_client.post(
+        "/automations/selfserve/reset-ipad/edit",
+        data=dict(form, button_choice="Save"),
+        content_type="multipart/form-data",
+    )
+    assert any(
+        "/mobiledeviceconfigurationprofiles/id/55" in url
+        for url, _ in profile_jamf.puts
+    )
+
+
+def test_delete_retires_the_profile(
+    logged_in_client, jawa_env, profile_jamf
+):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    logged_in_client.post(
+        "/automations/selfserve/reset-ipad/delete", data={}
+    )
+    url, kwargs = profile_jamf.puts[-1]
+    assert "/mobiledeviceconfigurationprofiles/id/55" in url
+    assert ".old." in kwargs["data"]

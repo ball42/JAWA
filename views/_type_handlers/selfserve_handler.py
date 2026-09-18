@@ -31,8 +31,14 @@ the managed device. See README.md, "Self-serve automations", and the
 device-facing receiver in webhook/selfserve_receiver.py.
 """
 
+import plistlib
+import re
 import secrets
+import time
+import uuid
 from typing import Any, Dict, List, Mapping, Optional, Tuple
+
+import requests
 
 from bin import logger
 from bin.data_store import (
@@ -41,8 +47,14 @@ from bin.data_store import (
     save_all_webhooks,
     save_script,
 )
+from bin.tokens import get_token, validate_token
 from views._type_handlers.base import AutomationError, AutomationHandler
-from views._type_handlers.jamf_handler import validate_webhook_name
+from views._type_handlers.jamf_handler import (
+    USER_AGENT_STRING,
+    XML,
+    validate_webhook_name,
+    xml_escape,
+)
 
 logthis = logger.setup_child_logger("jawa", "selfserve_handler")
 
@@ -83,6 +95,200 @@ def service_url(jawa_address: str, name: str, token: str) -> str:
         f"{jawa_address.rstrip('/')}/selfserve/{name}"
         f"?token={token}&id=$JSSID&udid=$UDID&{display}"
     )
+
+
+_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z0-9_]+\}")
+PROFILE_PREFIX = "JAWA Self-Serve: "
+PROFILE_ENDPOINT = "/JSSResource/mobiledeviceconfigurationprofiles"
+
+
+def _label(entry: Dict[str, Any]) -> str:
+    text = _PLACEHOLDER_RE.sub("", entry.get("page_title", "")).strip()
+    return " ".join(text.split()) or entry.get("name", "Self-Serve")
+
+
+def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
+    name = entry["name"]
+    base_id = f"com.jamf.jawa.selfserve.{name}"
+    payload = {
+        "PayloadContent": [
+            {
+                "FullScreen": True,
+                "IsRemovable": False,
+                "Label": _label(entry),
+                "PayloadDescription": (
+                    "Configures a JAWA self-serve web clip"
+                ),
+                "PayloadDisplayName": "Web Clip",
+                "PayloadIdentifier": f"{base_id}.webclip",
+                "PayloadType": "com.apple.webClip.managed",
+                "PayloadUUID": str(uuid.uuid4()).upper(),
+                "PayloadVersion": 1,
+                "Precomposed": True,
+                "URL": url,
+            }
+        ],
+        "PayloadDisplayName": PROFILE_PREFIX + _label(entry),
+        "PayloadIdentifier": base_id,
+        "PayloadOrganization": "JAWA",
+        "PayloadRemovalDisallowed": True,
+        "PayloadScope": "System",
+        "PayloadType": "Configuration",
+        "PayloadUUID": str(uuid.uuid4()).upper(),
+        "PayloadVersion": 1,
+    }
+    return plistlib.dumps(payload, fmt=plistlib.FMT_XML).decode("utf-8")
+
+
+def build_profile_xml(entry: Dict[str, Any], url: str) -> str:
+    """Classic API body. The plist rides inside <payloads> as escaped
+    text, which is how Jamf Pro's Classic API takes custom profiles."""
+    name = xml_escape(PROFILE_PREFIX + _label(entry))
+    description = xml_escape(
+        f"Created by JAWA for the self-serve automation "
+        f"\"{entry['name']}\". Scope it to the devices that should show "
+        "the web clip."
+    )
+    plist = xml_escape(build_webclip_plist(entry, url))
+    return (
+        "<mobile_device_configuration_profile><general>"
+        f"<name>{name}</name><description>{description}</description>"
+        "<distribution_method>Install Automatically</distribution_method>"
+        "<deployment_method>Install Automatically</deployment_method>"
+        "<redeploy_on_update>Newly Assigned</redeploy_on_update>"
+        f"<payloads>{plist}</payloads></general>"
+        "<scope><all_mobile_devices>false</all_mobile_devices></scope>"
+        "</mobile_device_configuration_profile>"
+    )
+
+
+def _headers(session_data: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        "Content-Type": XML,
+        "Authorization": f"Bearer {session_data.get('token')}",
+        "User-Agent": USER_AGENT_STRING,
+    }
+
+
+def _fresh_token(session_data: Dict[str, Any]) -> None:
+    if not validate_token(session_data.get("expires")):
+        get_token()
+
+
+def create_webclip_profile(
+    entry: Dict[str, Any], url: str, session_data: Dict[str, Any]
+) -> Optional[str]:
+    """POST the profile; return its Jamf id, or None on any failure.
+
+    Never raises: the service is still useful without the profile (the
+    detail page shows the URL for manual creation), so a Jamf error
+    degrades to profile_status "failed" rather than aborting create.
+    """
+    _fresh_token(session_data)
+    full_url = f"{session_data['url']}{PROFILE_ENDPOINT}/id/0"
+    try:
+        resp = requests.post(
+            full_url,
+            headers=_headers(session_data),
+            data=build_profile_xml(entry, url),
+            timeout=30,
+        )
+    except Exception as err:
+        logthis.error(
+            f"Could not create the web clip profile for "
+            f"{entry['name']}: {err}"
+        )
+        return None
+    if resp.status_code >= 400:
+        logthis.error(
+            f"Jamf Pro refused the web clip profile for {entry['name']}: "
+            f"HTTP {resp.status_code} - {resp.text}"
+        )
+        return None
+    match = re.search(r"<id>(\d+)</id>", resp.text or "")
+    if not match:
+        logthis.error(
+            f"Jamf Pro answered {resp.status_code} for the web clip "
+            f"profile of {entry['name']} but returned no id."
+        )
+        return None
+    return match.group(1)
+
+
+def update_webclip_profile(
+    entry: Dict[str, Any], url: str, session_data: Dict[str, Any]
+) -> bool:
+    if not entry.get("jamf_id"):
+        return False
+    _fresh_token(session_data)
+    full_url = (
+        f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
+    )
+    try:
+        resp = requests.put(
+            full_url,
+            headers=_headers(session_data),
+            data=build_profile_xml(entry, url),
+            timeout=30,
+        )
+    except Exception as err:
+        logthis.error(f"Could not update profile {entry['jamf_id']}: {err}")
+        return False
+    if resp.status_code >= 400:
+        logthis.error(
+            f"Jamf Pro refused the profile update for {entry['name']}: "
+            f"HTTP {resp.status_code}"
+        )
+        return False
+    return True
+
+
+def retire_webclip_profile(
+    entry: Dict[str, Any], session_data: Dict[str, Any]
+) -> None:
+    """Rename and unscope rather than delete, mirroring webhook delete."""
+    if not entry.get("jamf_id"):
+        return
+    _fresh_token(session_data)
+    name = xml_escape(
+        f"{PROFILE_PREFIX}{_label(entry)}.old.{time.time()}"
+    )
+    body = (
+        "<mobile_device_configuration_profile>"
+        f"<general><name>{name}</name></general>"
+        "<scope><all_mobile_devices>false</all_mobile_devices>"
+        "<mobile_devices/><mobile_device_groups/><buildings/>"
+        "<departments/></scope>"
+        "</mobile_device_configuration_profile>"
+    )
+    full_url = (
+        f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
+    )
+    try:
+        resp = requests.put(
+            full_url, headers=_headers(session_data), data=body, timeout=30
+        )
+        if resp.status_code >= 400:
+            logthis.error(
+                f"Error retiring profile {entry['jamf_id']}: "
+                f"HTTP {resp.status_code}"
+            )
+    except Exception as err:
+        logthis.error(f"Failed to retire profile {entry['jamf_id']}: {err}")
+
+
+def register_profile(
+    entry: Dict[str, Any], session_data: Dict[str, Any], wanted: bool
+) -> None:
+    """Fill jamf_id/profile_status on a freshly built entry."""
+    if not wanted:
+        entry["jamf_id"] = None
+        entry["profile_status"] = "skipped"
+        return
+    url = service_url(get_jawa_address() or "", entry["name"], entry["token"])
+    jamf_id = create_webclip_profile(entry, url, session_data)
+    entry["jamf_id"] = jamf_id
+    entry["profile_status"] = "created" if jamf_id else "failed"
 
 
 def _require_page_strings(form: Mapping[str, Any]) -> Dict[str, str]:
@@ -178,17 +384,26 @@ class SelfServeHandler(AutomationHandler):
         _require_page_strings(form)
         script_path = save_script(new_file, name)
         entry = build_service_entry(name, script_path, form, session_data)
+        register_profile(
+            entry, session_data, form.get("create_profile") == "on"
+        )
         url = service_url(jawa_address, name, entry["token"])
         logthis.info(
             f"{session_data.get('username')} created self-serve "
             f"automation {name}."
         )
+        extra_notice = "Web clip URL for the configuration profile:"
+        if entry["profile_status"] == "failed":
+            extra_notice = (
+                "Jamf Pro did not accept the web clip profile; create "
+                "it by hand with this URL:"
+            )
         return {
             "entry": entry,
             "success_msg": "New self-serve automation created:",
             "new_here": name,
             "new_link": f"/automations/selfserve/{name}",
-            "extra_notice": "Web clip URL for the configuration profile:",
+            "extra_notice": extra_notice,
             "custom_header": {"URL": url},
         }
 
@@ -211,6 +426,16 @@ class SelfServeHandler(AutomationHandler):
                 files["new_file"], existing["name"]
             )
         save_all_webhooks(all_items)
+        if existing.get("jamf_id"):
+            update_webclip_profile(
+                existing,
+                service_url(
+                    get_jawa_address() or "",
+                    existing["name"],
+                    existing["token"],
+                ),
+                session_data,
+            )
         logthis.info(
             f"{session_data.get('username')} edited self-serve "
             f"automation {existing['name']}."
@@ -224,6 +449,7 @@ class SelfServeHandler(AutomationHandler):
     def process_delete(
         self, automation: Dict, session_data: Dict
     ) -> Optional[str]:
+        retire_webclip_profile(automation, session_data)
         retire_script(automation.get("script", ""))
         return None
 
