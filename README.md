@@ -168,6 +168,76 @@ event_data = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
 
 Timed automations run under the system's cron, so a script's output and exit status are handled by cron (for example, in the host's mail/syslog), not captured in the JAWA log.
 
+### Self-serve automations (web clip)
+
+A self-serve automation is a fifth trigger type. A person taps a web clip on their own managed
+iOS or iPadOS device; JAWA shows a confirmation page describing what will happen, and only when
+they tap the confirm button does JAWA run the script — synchronously, against that device — and
+show a success or failure page.
+
+**The URL contract**
+
+The web clip's URL points at JAWA:
+
+```
+https://<jawa>/selfserve/<service-name>?token=<service token>&id=$JSSID&udid=$UDID&DEVICENAME=$DEVICENAME&SERIALNUMBER=$SERIALNUMBER
+```
+
+`token`, `id`, and `udid` are reserved and required. `token` is the automation's per-service
+token; `id` and `udid` are Jamf Pro payload variables (`$JSSID`, `$UDID`), substituted per device
+when the profile installs. JAWA adds `DEVICENAME` and `SERIALNUMBER` to the URL by default; any
+other Jamf Pro payload variable can be appended the same way. Any query parameter beyond `token`,
+`id`, and `udid` passes through to the script and can be shown on the confirmation or result page
+with a `{NAME}` placeholder.
+
+**Security**
+
+The token is the same for every device carrying the profile, so treat it as a gate, not a
+per-device credential. The script itself must fetch the device by `id` from Jamf Pro and refuse
+if the UDID does not match — the two bundled templates do this. Nothing runs on the GET request
+that loads the confirmation page, only the confirmation form's POST runs the script, and
+`/hooks/<name>` refuses self-serve automations, which can only be triggered through
+`/selfserve/<name>`.
+
+**The payload contract**
+
+The script receives the same JSON-on-`sys.argv[1]` contract as a webhook automation, built from
+the query string:
+
+```json
+{
+  "webhook": {
+    "webhookEvent": "SelfServe",
+    "name": "<service-name>",
+    "eventTimestamp": <int ms>
+  },
+  "event": {
+    "jssID": <int>,
+    "udid": "<str>",
+    "deviceType": "mobile" | "computer",
+    "params": {"<every query/form field except token, id, udid>": "..."},
+    "remoteAddress": "<str>"
+  }
+}
+```
+
+`deviceType` comes from the automation's device family.
+
+**Jamf Pro side**
+
+Creating a self-serve automation — or enabling one of the bundled self-serve templates — can
+create the web clip configuration profile for you, unscoped; scope it to the right devices in
+Jamf Pro afterward. If Jamf Pro refuses to create the profile, the automation's detail page shows
+the web clip URL so you can build the profile by hand.
+
+**Bundled templates**
+
+- **Return to Service (Self-Serve).** Lets the person holding a shared iPad or iPhone erase it
+  and re-enroll it themselves, with no IT touch.
+- **Brander (Self-Serve).** Lets the person holding an iPad or iPhone apply a branded wallpaper
+  showing the device's name, serial, location, and a QR code of its Jamf Pro id; it needs Pillow
+  and qrcode, which the installer installs from `requirements.txt`.
+
 ### Complete example
 
 This bundled script (`data/workflows/scripts/smart_group_slack.py`) posts to Slack when devices join a smart group:
@@ -291,6 +361,8 @@ Find JAWA releases [here.](https://github.com/jamf/JAWA/releases)
   `data/` directory across an upgrade, which protects your automations and settings, but it also
   means the bundled template scripts and the webhook event catalog stay at the version you first
   installed. A fresh install gets the current copies.
+- JAWA now installs Pillow and qrcode (for the Brander template). Re-run the installer, or
+  `venv/bin/python -m pip install -r requirements.txt`, when upgrading in place.
 
 - New features
     - **Bundled templates now work as shipped.** Every bundled template runs when triggered; two
@@ -314,6 +386,10 @@ Find JAWA releases [here.](https://github.com/jamf/JAWA/releases)
     - Script Preview and Download Script now show the real substitution tokens rather than
       generic placeholder text, so a downloaded script is self-documenting.
     - Resource Files listing gained Size and Type columns.
+    - **Self-serve automations.** A web clip on a managed iOS/iPadOS device can trigger a JAWA
+      automation against that device, with a confirmation page, a per-service token and a UDID
+      cross-check. Two templates ship on it: Return to Service (Self-Serve) and Brander
+      (Self-Serve). See "Self-serve automations (web clip)".
 - Bugfixes
     - Template webhooks now fire (see upgrade notes).
     - Configuration values containing `&`, quotes, or angle brackets — Microsoft Teams and Power
