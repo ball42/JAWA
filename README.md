@@ -180,13 +180,15 @@ show a success or failure page.
 The web clip's URL points at JAWA:
 
 ```
-https://<jawa>/selfserve/<service-name>?token=<service token>&id=$JSSID&udid=$UDID&DEVICENAME=$DEVICENAME
+https://<jawa>/selfserve/<service-name>?token=<service token>&id=$JSSID&udid=$UDID&DEVICENAME=$DEVICENAME&SERIALNUMBER=$SERIALNUMBER
 ```
 
 `token`, `id`, and `udid` are reserved and required. `token` is the automation's per-service
 token; `id` and `udid` are Jamf Pro payload variables (`$JSSID`, `$UDID`), substituted per device
-when the profile installs. Any other query parameter passes through to the script and can be
-shown on the confirmation or result page with a `{NAME}` placeholder.
+when the profile installs. JAWA adds `DEVICENAME` and `SERIALNUMBER` to the URL by default; any
+other Jamf Pro payload variable can be appended the same way. Any query parameter beyond `token`,
+`id`, and `udid` passes through to the script and can be shown on the confirmation or result page
+with a `{NAME}` placeholder.
 
 **Security**
 

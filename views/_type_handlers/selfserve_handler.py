@@ -39,6 +39,7 @@ import uuid
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import requests
+from flask import session
 
 from bin import logger
 from bin.data_store import (
@@ -111,6 +112,17 @@ def _label(entry: Dict[str, Any]) -> str:
     return text or entry.get("name", "Self-Serve")
 
 
+def _display_name(entry: Dict[str, Any]) -> str:
+    """The profile's display name in Jamf Pro.
+
+    Jamf Pro profile names must be unique, and _label() alone is
+    derived only from page_title, so two services created from the
+    same template with the default title would collide (HTTP 409).
+    The service name disambiguates them.
+    """
+    return f"{PROFILE_PREFIX}{_label(entry)} ({entry['name']})"
+
+
 def _uuid_for(identifier: str) -> str:
     """A deterministic PayloadUUID so re-building the same profile
     (e.g. on edit) does not needlessly change every UUID."""
@@ -138,7 +150,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
                 "URL": url,
             }
         ],
-        "PayloadDisplayName": PROFILE_PREFIX + _label(entry),
+        "PayloadDisplayName": _display_name(entry),
         "PayloadIdentifier": base_id,
         "PayloadOrganization": "JAWA",
         "PayloadRemovalDisallowed": True,
@@ -153,7 +165,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
 def build_profile_xml(entry: Dict[str, Any], url: str) -> str:
     """Classic API body. The plist rides inside <payloads> as escaped
     text, which is how Jamf Pro's Classic API takes custom profiles."""
-    name = xml_escape(PROFILE_PREFIX + _label(entry))
+    name = xml_escape(_display_name(entry))
     description = xml_escape(
         f"Created by JAWA for the self-serve automation "
         f"\"{entry['name']}\". Scope it to the devices that should show "
@@ -181,8 +193,17 @@ def _headers(session_data: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _fresh_token(session_data: Dict[str, Any]) -> None:
+    """Refresh session_data's token snapshot when it has expired.
+
+    get_token() stores the new token/expires in flask.session and
+    returns None; _headers() reads session_data (a snapshot taken
+    earlier), so the fresh values must be copied back or the request
+    goes out with the stale token.
+    """
     if not validate_token(session_data.get("expires")):
         get_token()
+        session_data["token"] = session.get("token")
+        session_data["expires"] = session.get("expires")
 
 
 def create_webclip_profile(
@@ -261,9 +282,7 @@ def retire_webclip_profile(
     """Rename and unscope rather than delete, mirroring webhook delete."""
     if not entry.get("jamf_id"):
         return
-    name = xml_escape(
-        f"{PROFILE_PREFIX}{_label(entry)}.old.{time.time()}"
-    )
+    name = xml_escape(f"{_display_name(entry)}.old.{time.time()}")
     body = (
         "<mobile_device_configuration_profile>"
         f"<general><name>{name}</name></general>"

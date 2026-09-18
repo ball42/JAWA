@@ -229,12 +229,28 @@ def test_profile_xml_is_well_formed_and_unscoped():
     entry = {"name": "reset-ipad", "page_title": "Reset"}
     root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/?a=1&b=2"))
     assert root.tag == "mobile_device_configuration_profile"
-    assert root.findtext("general/name") == "JAWA Self-Serve: Reset"
+    assert (
+        root.findtext("general/name")
+        == "JAWA Self-Serve: Reset (reset-ipad)"
+    )
     assert root.findtext("scope/all_mobile_devices") == "false"
     assert root.findtext("general/redeploy_on_update") == "All"
     payloads = root.findtext("general/payloads")
     assert "com.apple.webClip.managed" in payloads
     assert "a=1&amp;b=2" in payloads  # escaped inside the plist string
+
+
+def test_profile_xml_names_differ_for_same_title_different_service():
+    """Jamf Pro profile names must be unique; two services created from
+    the same template share page_title by default, so the service
+    name must disambiguate them."""
+    entry_a = {"name": "reset-ipad-a", "page_title": "Reset"}
+    entry_b = {"name": "reset-ipad-b", "page_title": "Reset"}
+    root_a = ET.fromstring(ssh.build_profile_xml(entry_a, "https://x/"))
+    root_b = ET.fromstring(ssh.build_profile_xml(entry_b, "https://x/"))
+    assert root_a.findtext("general/name") != root_b.findtext(
+        "general/name"
+    )
 
 
 def test_create_with_checkbox_creates_profile_and_stores_id(
@@ -252,6 +268,32 @@ def test_create_with_checkbox_creates_profile_and_stores_id(
     url, kwargs = profile_jamf.posts[0]
     assert kwargs["headers"]["Authorization"] == "Bearer test-token"
     assert entry["token"] in kwargs["data"]
+
+
+def test_create_refreshes_the_token_before_posting_the_profile(
+    logged_in_client, jawa_env, profile_jamf, monkeypatch
+):
+    """_fresh_token() calls get_token(), which stores the new token in
+    flask.session and returns None; the stale token snapshot in
+    session_data must be replaced with the fresh one before the
+    profile request is built, or Jamf Pro gets the old token."""
+    from flask import session
+
+    monkeypatch.setattr(ssh, "validate_token", lambda *_a, **_k: False)
+
+    def _refresh(*_a, **_k):
+        session["token"] = "fresh-token"
+        return None
+
+    monkeypatch.setattr(ssh, "get_token", _refresh)
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    assert len(profile_jamf.posts) == 1
+    _url, kwargs = profile_jamf.posts[0]
+    assert kwargs["headers"]["Authorization"] == "Bearer fresh-token"
 
 
 def test_create_without_checkbox_skips_jamf(

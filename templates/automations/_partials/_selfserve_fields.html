@@ -31,7 +31,7 @@
    any variable you put in the web clip URL.</p>
 <input name="page_title" class="form-control" placeholder="Page title"
        required
-       value="{{ info.page_title if info else 'Reset {DEVICENAME}?' }}">
+       value="{{ info.page_title if info else '{DEVICENAME}' }}">
 <textarea name="page_description" class="form-control"
           placeholder="Page description"
           required>{{ info.page_description if info else '' }}</textarea>

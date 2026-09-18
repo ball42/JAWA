@@ -151,6 +151,9 @@ def test_get_renders_confirmation_with_filled_placeholders(
     assert 'name="id"' in body and 'value="42"' in body
     assert 'name="udid"' in body
     assert 'name="DEVICENAME"' in body
+    # The token sits in the page URL; keep it out of the Referer
+    # header sent to any CDN asset the layout loads.
+    assert 'name="referrer"' in body
     # GET never runs anything.
     assert fake_popen.calls == []
 
@@ -246,6 +249,7 @@ def test_post_runs_script_with_the_contract_payload(
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "Done. Put iPad-042 down." in body
+    assert 'name="referrer"' in body
     assert len(fake_popen.calls) == 1
     argv = fake_popen.calls[0]
     assert argv[0] == entry["script"]
