@@ -91,7 +91,7 @@ def parse_device_request(
         raise SelfServeRequestError(
             400, "This link is missing the device id or UDID."
         )
-    if not raw_id.isdigit():
+    if not (raw_id.isascii() and raw_id.isdigit()):
         raise SelfServeRequestError(400, "The device id is not a number.")
     params = {
         key: value
@@ -107,7 +107,10 @@ def token_matches(
     expected = str(service.get("token") or "")
     if not expected or not presented:
         return False
-    return hmac.compare_digest(expected, str(presented))
+    return hmac.compare_digest(
+        expected.encode("utf-8", "surrogateescape"),
+        str(presented).encode("utf-8", "surrogateescape"),
+    )
 
 
 def build_selfserve_payload(

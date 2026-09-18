@@ -190,6 +190,34 @@ def test_get_without_udid_is_400(client, jawa_env, fake_popen):
     assert resp.status_code == 400
 
 
+def test_get_with_non_ascii_token_is_401_not_500(
+    client, jawa_env, fake_popen
+):
+    """hmac.compare_digest raises TypeError on non-ASCII str input;
+    token_matches must compare as bytes so a bad token is a 401, not
+    an unhandled 500."""
+    _make_service(jawa_env)
+    resp = client.get(
+        "/selfserve/reset-ipad", query_string=dict(GOOD_QUERY, token="☃")
+    )
+    assert resp.status_code == 401
+    assert fake_popen.calls == []
+
+
+def test_get_with_non_ascii_unicode_digit_id_is_400_not_500(
+    client, jawa_env, fake_popen
+):
+    """str.isdigit() accepts Unicode digits (e.g. '²') that
+    int() rejects; parse_device_request must reject them as 400
+    rather than raising ValueError."""
+    _make_service(jawa_env)
+    resp = client.get(
+        "/selfserve/reset-ipad", query_string=dict(GOOD_QUERY, id="²")
+    )
+    assert resp.status_code == 400
+    assert fake_popen.calls == []
+
+
 def test_non_selfserve_entry_is_not_a_service(client, jawa_env, fake_popen):
     _make_service(jawa_env, tag="custom")
     resp = client.get("/selfserve/reset-ipad", query_string=GOOD_QUERY)
