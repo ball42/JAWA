@@ -380,6 +380,7 @@ def _extract_name(auto_type: str, form) -> str:
         "okta": "webhookname",
         "custom": "custom_name",
         "cron": "cron_name",
+        "selfserve": "service_name",
     }
     field = name_fields.get(auto_type, "name")
     return form.get(field, "")
