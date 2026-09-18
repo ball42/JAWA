@@ -134,3 +134,80 @@ def test_enable_overrides_page_strings_from_the_form(
         data_store.get_webhook_by_name("reset-2")["page_title"]
         == "Custom {DEVICENAME}"
     )
+
+
+ASSETS = os.path.join(REPO_ROOT, "data", "workflows", "assets", "brander")
+
+
+def test_brander_template_and_assets_ship():
+    assert "self-serve-brander" in SLUGS
+    for name in (
+        "lockscreen-template.png",
+        "null.png",
+        "brandlogo.png",
+        "nursing.png",
+        "patient.png",
+        "pharmacist.png",
+        "technician.png",
+        "transport.png",
+        "videoconferencing.png",
+        "README.md",
+    ):
+        assert os.path.isfile(os.path.join(ASSETS, name)), name
+    assert not os.path.exists(os.path.join(ASSETS, "SF-Pro.ttf"))
+
+
+def test_brander_requirements_are_declared():
+    path = os.path.join(REPO_ROOT, "requirements.txt")
+    with open(path, encoding="utf-8") as handle:
+        reqs = handle.read().lower()
+    assert "pillow" in reqs
+    assert "qrcode" in reqs
+
+
+def test_brander_script_generates_an_image_without_a_font_file(tmp_path):
+    """The image pipeline must work with Pillow's built-in font so the
+    template ships with no proprietary font."""
+    import importlib.util
+
+    path = os.path.join(
+        REPO_ROOT, "data", "workflows", "scripts", "self_serve_brander.py"
+    )
+    with open(path, encoding="utf-8") as handle:
+        source = handle.read()
+    source = (
+        source.replace('"__JAWA_EA_ID__"', "0")
+        .replace("__JAWA_EA_ID__", "0")
+        .replace("__JAWA_WALLPAPER_SETTING__", "3")
+        # font_path is a required field at enable time, so the deployed
+        # script never carries the bare token; "none" is the sentinel
+        # value load_font() treats as the built-in font.
+        .replace('"__JAWA_FONT_PATH__"', '"none"')
+    )
+    spec = importlib.util.spec_from_loader("ss_brander", loader=None)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(source, path, "exec"), module.__dict__)
+    device = {
+        "general": {
+            "id": 42,
+            "device_name": "iPad-042",
+            "serial_number": "DMPX1",
+            "model": "iPad",
+            "os_type": "iPadOS",
+            "os_version": "18.0",
+        },
+        "location": {
+            "building": "Main",
+            "department": "Nursing",
+            "room": "3A",
+            "username": "nurse",
+        },
+    }
+    out = module.make_image(
+        ASSETS, "lockscreen-template", "Nursing", device, "", str(tmp_path)
+    )
+    assert os.path.isfile(out)
+    from PIL import Image
+
+    with Image.open(out) as img:
+        assert img.size[0] > 100

@@ -336,5 +336,88 @@
         ],
         "tags": ["self-serve", "web-clip", "mobile", "erase", "return-to-service"],
         "order": 9
+    },
+    {
+        "slug": "self-serve-brander",
+        "title": "Brander (Self-Serve)",
+        "description": "Let the person holding an iPad or iPhone apply a branded wallpaper showing the device's name, serial, location and a QR code of its Jamf Pro id.",
+        "category": "provisioning",
+        "trigger_type": "selfserve",
+        "trigger_event": null,
+        "script_file": "self_serve_brander.py",
+        "hook_name": "brand-device",
+        "selfserve": {
+            "device_family": "mobile",
+            "page_title": "Brand {DEVICENAME}",
+            "page_description": "Apply the standard wallpaper with this device's identifying details.",
+            "confirm_label": "Apply wallpaper",
+            "success_message": "The wallpaper is on its way. It can take a minute to appear.",
+            "failure_message": "The wallpaper could not be applied. Please tell IT."
+        },
+        "api_privileges": [
+            "Read Mobile Devices",
+            "Send Mobile Device Set Wallpaper Command"
+        ],
+        "config_params": [
+            {
+                "key": "server_url",
+                "label": "Jamf Pro URL",
+                "placeholder": "https://example.jamfcloud.com",
+                "token": "\"__JAWA_SERVER_URL__\"",
+                "type": "text"
+            },
+            {
+                "key": "client_id",
+                "label": "OAuth Client ID",
+                "placeholder": "your-api-client-id",
+                "token": "\"__JAWA_CLIENT_ID__\"",
+                "type": "text"
+            },
+            {
+                "key": "client_secret",
+                "label": "OAuth Client Secret",
+                "placeholder": "your-api-client-secret",
+                "token": "\"__JAWA_CLIENT_SECRET__\"",
+                "type": "password"
+            },
+            {
+                "key": "ea_id",
+                "label": "Jamf Setup role extension attribute ID (0 if unused)",
+                "placeholder": "0",
+                "token": "__JAWA_EA_ID__",
+                "type": "number"
+            },
+            {
+                "key": "wallpaper_setting",
+                "label": "Wallpaper target (1 lock screen, 2 home screen, 3 both)",
+                "placeholder": "3",
+                "token": "__JAWA_WALLPAPER_SETTING__",
+                "type": "number"
+            },
+            {
+                "key": "assets_dir",
+                "label": "Assets directory (backgrounds)",
+                "placeholder": "/usr/local/jawa/data/workflows/assets/brander",
+                "token": "\"__JAWA_ASSETS_DIR__\"",
+                "type": "text"
+            },
+            {
+                "key": "font_path",
+                "label": "Font file path (enter none for the built-in font)",
+                "placeholder": "none",
+                "token": "\"__JAWA_FONT_PATH__\"",
+                "type": "text"
+            }
+        ],
+        "exit_codes": [
+            {"code": 0, "meaning": "Success — wallpaper command sent"},
+            {"code": 12, "meaning": "Payload did not name a device id and UDID"},
+            {"code": 20, "meaning": "UDID did not match the device record (refused)"},
+            {"code": 21, "meaning": "Device id not found in Jamf Pro"},
+            {"code": 24, "meaning": "Wallpaper command refused by Jamf Pro"},
+            {"code": 42, "meaning": "The device's Brander extension attribute is Off"}
+        ],
+        "tags": ["self-serve", "web-clip", "mobile", "wallpaper", "branding"],
+        "order": 10
     }
 ]
