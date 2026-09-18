@@ -88,6 +88,16 @@ def validate_webhook(
                     "not enabled."
                 )
                 return False
+            # A self-serve automation is only reachable through
+            # /selfserve/<name> with its token. Its record carries the
+            # "null" auth sentinels, which would otherwise make
+            # /hooks/<name> an open, token-free way to run the script.
+            if each_webhook.get("tag") == "selfserve":
+                logthis.warning(
+                    f"Rejecting /hooks/{webhook_name}: self-serve "
+                    "automations only run from /selfserve/."
+                )
+                return False
             truth_test = True
             if (
                 # Missing auth keys default to the "null" no-auth

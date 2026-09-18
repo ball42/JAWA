@@ -1,0 +1,42 @@
+{% extends "shared/_layout.html" %}
+
+{% block title %}{{ strings.page_title }} | JAWA{% endblock %}
+
+{% block additional_css %}
+<style>
+    .selfserve-card {
+        max-width: 560px;
+        margin: 3rem auto;
+        padding: 2.5rem 2rem;
+        background: var(--color-surface-raised);
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        text-align: center;
+    }
+    .selfserve-card h1 { font-size: 1.6rem; margin-bottom: 1rem; }
+    .selfserve-card p { color: var(--color-text-secondary); }
+    .selfserve-actions { margin-top: 2rem; }
+    .selfserve-actions .btn { min-width: 12rem; font-size: 1.05rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="selfserve-card">
+        <h1>{{ strings.page_title }}</h1>
+        <p>{{ strings.page_description }}</p>
+        <form method="POST" action="/selfserve/{{ service_name }}"
+              class="selfserve-actions">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="id" value="{{ jss_id }}">
+            <input type="hidden" name="udid" value="{{ udid }}">
+            {% for key, value in params.items() %}
+            <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endfor %}
+            <button type="submit" class="btn btn-jawa">
+                {{ strings.confirm_label }}
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
