@@ -175,7 +175,10 @@ def test_any_event_template_never_renders_the_word_none(
     trigger must fall back to a real label instead.
     """
     slug = next(
-        wf["slug"] for wf in CATALOG if wf.get("trigger_event") is None
+        wf["slug"]
+        for wf in CATALOG
+        if wf.get("trigger_event") is None
+        and wf.get("trigger_type") != "selfserve"
     )
     for path in (
         "/templates",
@@ -206,7 +209,10 @@ def test_enabling_an_any_event_template_stores_no_none_event(
     from bin import data_store
 
     slug = next(
-        wf["slug"] for wf in CATALOG if wf.get("trigger_event") is None
+        wf["slug"]
+        for wf in CATALOG
+        if wf.get("trigger_event") is None
+        and wf.get("trigger_type") != "selfserve"
     )
     form = enable_form(slug, webhook_name="any-hook")
     logged_in_client.post(f"/templates/{slug}/enable", data=form)

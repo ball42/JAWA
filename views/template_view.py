@@ -62,6 +62,12 @@ from views._type_handlers.jamf_handler import (
     _smart_group_info,
     validate_webhook_name,
 )
+from views._type_handlers.selfserve_handler import (
+    PAGE_FIELDS,
+    build_service_entry,
+    register_profile,
+    service_url,
+)
 
 # Reused, not re-implemented: the one-shot success flash has to behave
 # identically on the template path and the create path, or the two drift
@@ -683,6 +689,91 @@ def download_script(slug: str) -> Union[Response, str]:
     )
 
 
+def _enable_selfserve(workflow: Dict[str, Any], credentials: list):
+    """Enable a self-serve template: substitute config, write the
+    script, build the service record through the self-serve handler
+    helpers, optionally create the web clip profile."""
+    defaults = workflow.get("selfserve", {})
+    name = request.form.get("webhook_name", workflow["hook_name"]).strip()
+    try:
+        validate_webhook_name(name)
+        if data_store.get_webhook_by_name(name):
+            raise AutomationError(
+                "Error", f'The name "{name}" is already in use.'
+            )
+        jawa_address = get_jawa_address()
+        if not jawa_address:
+            raise AutomationError(
+                "Setup Required",
+                "Configure your JAWA address before enabling a template.",
+                link="/setup",
+                link_text="Go to Setup",
+            )
+        src_path = os.path.join(
+            TEMPLATE_SCRIPTS_DIR, workflow["script_file"]
+        )
+        if not os.path.isfile(src_path):
+            raise AutomationError(
+                "Script not found",
+                f"Script {workflow['script_file']} not found.",
+            )
+        with open(src_path, "r", encoding="utf-8") as f:
+            script_content = f.read()
+        script_content = substitute_params(
+            script_content,
+            workflow,
+            request.form,
+            credentials,
+            request.form.get("credential_set", ""),
+        )
+        # Form values win; the catalog supplies anything left blank.
+        merged = {
+            key: (request.form.get(key) or defaults.get(key, ""))
+            for key in PAGE_FIELDS + ("device_family",)
+        }
+        session_data = {
+            "url": session.get("url", ""),
+            "username": session.get("username", ""),
+            "token": session.get("token"),
+            "expires": session.get("expires"),
+        }
+        # Validate before writing the script so a bad field leaves
+        # nothing on disk.
+        build_service_entry(name, "", merged, session_data)
+    except AutomationError as err:
+        return redirect(
+            url_for("error", error=err.title, error_message=err.message)
+        )
+
+    dest_path = _write_script(name, script_content)
+    entry = build_service_entry(
+        name, dest_path, merged, session_data,
+        description=workflow.get("description", ""),
+    )
+    register_profile(
+        entry, session_data, request.form.get("create_profile") == "on"
+    )
+    data_store.add_webhook(entry)
+    url = service_url(jawa_address, name, entry["token"])
+    logthis.info(
+        f"[{session.get('url')}] {session.get('username')} enabled "
+        f"self-serve template: {name} (profile: {entry['profile_status']})"
+    )
+    notice = "Web clip URL for the configuration profile:"
+    if entry["profile_status"] == "failed":
+        notice = (
+            "Jamf Pro did not accept the web clip profile; create it by "
+            "hand with this URL:"
+        )
+    return _flash_success(
+        success_msg=f"Enabled self-serve template: {name}",
+        new_link=f"/automations/selfserve/{name}",
+        new_here=name,
+        extra_notice=notice,
+        custom_header={"URL": url},
+    )
+
+
 @blueprint.route("/templates/<slug>/enable", methods=["GET", "POST"])
 def enable_template(slug: str) -> Union[Response, str]:
     """Enable a template: configure and install as a webhook."""
@@ -702,12 +793,19 @@ def enable_template(slug: str) -> Union[Response, str]:
 
     credentials = _load_credentials()
 
+    if (
+        request.method == "POST"
+        and workflow.get("trigger_type") == "selfserve"
+    ):
+        return _enable_selfserve(workflow, credentials)
+
     if request.method == "GET":
         return render_template(
             "workflows/enable.html",
             username=session.get("username"),
             workflow=workflow,
             credentials=credentials,
+            selfserve_defaults=workflow.get("selfserve", {}),
             event_categories=get_webhook_schemas()["categories"],
             # Passed, not hardcoded in Jinja: the template marks a param
             # required only when a credential set cannot supply it, and

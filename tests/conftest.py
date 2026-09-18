@@ -283,7 +283,8 @@ def _build_enable_form(slug, **overrides):
     workflow = next(wf for wf in catalog if wf["slug"] == slug)
 
     form = {"webhook_name": slug}
-    if not workflow.get("trigger_event"):
+    is_selfserve = workflow.get("trigger_type") == "selfserve"
+    if not workflow.get("trigger_event") and not is_selfserve:
         with open(
             os.path.join(REPO_ROOT, "data", "webhook_schemas.json"),
             "r",
