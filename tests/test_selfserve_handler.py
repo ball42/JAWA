@@ -179,6 +179,7 @@ class _ProfileJamf:
         self.posts = []
         self.puts = []
         self.status = status
+        self.put_status = 201
 
     def post(self, url, **kwargs):
         if "/JSSResource/mobiledeviceconfigurationprofiles/id/0" in url:
@@ -193,7 +194,9 @@ class _ProfileJamf:
 
     def put(self, url, **kwargs):
         self.puts.append((url, kwargs))
-        return self._fake_response_cls({}, status_code=201, text="<id>55</id>")
+        return self._fake_response_cls(
+            {}, status_code=self.put_status, text="<id>55</id>"
+        )
 
 
 @pytest.fixture()
@@ -213,7 +216,7 @@ def test_plist_is_a_managed_web_clip_with_the_service_url():
     clip = plist["PayloadContent"][0]
     assert clip["PayloadType"] == "com.apple.webClip.managed"
     assert clip["URL"] == url
-    assert clip["Label"] == "Reset ?"  # placeholders stripped
+    assert clip["Label"] == "Reset?"  # placeholders stripped
     assert clip["IsRemovable"] is False
     assert clip["FullScreen"] is True
     assert (
@@ -228,6 +231,7 @@ def test_profile_xml_is_well_formed_and_unscoped():
     assert root.tag == "mobile_device_configuration_profile"
     assert root.findtext("general/name") == "JAWA Self-Serve: Reset"
     assert root.findtext("scope/all_mobile_devices") == "false"
+    assert root.findtext("general/redeploy_on_update") == "All"
     payloads = root.findtext("general/payloads")
     assert "com.apple.webClip.managed" in payloads
     assert "a=1&amp;b=2" in payloads  # escaped inside the plist string
@@ -313,3 +317,66 @@ def test_delete_retires_the_profile(
     url, kwargs = profile_jamf.puts[-1]
     assert "/mobiledeviceconfigurationprofiles/id/55" in url
     assert ".old." in kwargs["data"]
+
+
+def test_computer_family_never_gets_a_mobile_profile(
+    logged_in_client, jawa_env, profile_jamf
+):
+    """Web Clips are a mobile device profile payload; Jamf Pro has no
+    computer equivalent, so a computer-family service must be skipped
+    even with the checkbox on."""
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(
+            device_family="computer", create_profile="on"
+        ),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry["jamf_id"] is None
+    assert entry["profile_status"] == "skipped"
+    assert profile_jamf.posts == []
+
+
+def test_token_check_failure_still_creates_the_service(
+    logged_in_client, jawa_env, profile_jamf, monkeypatch
+):
+    """A malformed/expired-token check must degrade to
+    profile_status "failed", never bubble out of the "never raises"
+    profile helpers (and never 500 the create request)."""
+
+    def _boom(*_a, **_k):
+        raise ValueError("bad expires value")
+
+    monkeypatch.setattr(ssh, "validate_token", _boom)
+    resp = logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code != 500
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry is not None
+    assert entry["jamf_id"] is None
+    assert entry["profile_status"] == "failed"
+    assert profile_jamf.posts == []
+
+
+def test_edit_marks_the_profile_failed_when_jamf_refuses_the_update(
+    logged_in_client, jawa_env, profile_jamf
+):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    profile_jamf.put_status = 409
+    form = _create_form(page_title="Wipe it")
+    del form["new_file"]
+    logged_in_client.post(
+        "/automations/selfserve/reset-ipad/edit",
+        data=dict(form, button_choice="Save"),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry["profile_status"] == "failed"

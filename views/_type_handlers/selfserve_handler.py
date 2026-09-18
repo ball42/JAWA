@@ -51,6 +51,7 @@ from bin.tokens import get_token, validate_token
 from views._type_handlers.base import AutomationError, AutomationHandler
 from views._type_handlers.jamf_handler import (
     USER_AGENT_STRING,
+    VERIFY_SSL,
     XML,
     validate_webhook_name,
     xml_escape,
@@ -97,14 +98,23 @@ def service_url(jawa_address: str, name: str, token: str) -> str:
     )
 
 
-_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z0-9_]+\}")
+_PLACEHOLDER_RE = re.compile(r"\s*\{[A-Za-z0-9_]+\}\s*")
+_PRE_PUNCT_RE = re.compile(r"\s+([?!.,:;])")
 PROFILE_PREFIX = "JAWA Self-Serve: "
 PROFILE_ENDPOINT = "/JSSResource/mobiledeviceconfigurationprofiles"
 
 
 def _label(entry: Dict[str, Any]) -> str:
-    text = _PLACEHOLDER_RE.sub("", entry.get("page_title", "")).strip()
-    return " ".join(text.split()) or entry.get("name", "Self-Serve")
+    text = _PLACEHOLDER_RE.sub(" ", entry.get("page_title", ""))
+    text = _PRE_PUNCT_RE.sub(r"\1", text)
+    text = " ".join(text.split())
+    return text or entry.get("name", "Self-Serve")
+
+
+def _uuid_for(identifier: str) -> str:
+    """A deterministic PayloadUUID so re-building the same profile
+    (e.g. on edit) does not needlessly change every UUID."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, identifier)).upper()
 
 
 def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
@@ -122,7 +132,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
                 "PayloadDisplayName": "Web Clip",
                 "PayloadIdentifier": f"{base_id}.webclip",
                 "PayloadType": "com.apple.webClip.managed",
-                "PayloadUUID": str(uuid.uuid4()).upper(),
+                "PayloadUUID": _uuid_for(f"{base_id}.webclip"),
                 "PayloadVersion": 1,
                 "Precomposed": True,
                 "URL": url,
@@ -134,7 +144,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
         "PayloadRemovalDisallowed": True,
         "PayloadScope": "System",
         "PayloadType": "Configuration",
-        "PayloadUUID": str(uuid.uuid4()).upper(),
+        "PayloadUUID": _uuid_for(base_id),
         "PayloadVersion": 1,
     }
     return plistlib.dumps(payload, fmt=plistlib.FMT_XML).decode("utf-8")
@@ -155,7 +165,7 @@ def build_profile_xml(entry: Dict[str, Any], url: str) -> str:
         f"<name>{name}</name><description>{description}</description>"
         "<distribution_method>Install Automatically</distribution_method>"
         "<deployment_method>Install Automatically</deployment_method>"
-        "<redeploy_on_update>Newly Assigned</redeploy_on_update>"
+        "<redeploy_on_update>All</redeploy_on_update>"
         f"<payloads>{plist}</payloads></general>"
         "<scope><all_mobile_devices>false</all_mobile_devices></scope>"
         "</mobile_device_configuration_profile>"
@@ -184,13 +194,14 @@ def create_webclip_profile(
     detail page shows the URL for manual creation), so a Jamf error
     degrades to profile_status "failed" rather than aborting create.
     """
-    _fresh_token(session_data)
     full_url = f"{session_data['url']}{PROFILE_ENDPOINT}/id/0"
     try:
+        _fresh_token(session_data)
         resp = requests.post(
             full_url,
             headers=_headers(session_data),
             data=build_profile_xml(entry, url),
+            verify=VERIFY_SSL,
             timeout=30,
         )
     except Exception as err:
@@ -220,15 +231,16 @@ def update_webclip_profile(
 ) -> bool:
     if not entry.get("jamf_id"):
         return False
-    _fresh_token(session_data)
     full_url = (
         f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
     )
     try:
+        _fresh_token(session_data)
         resp = requests.put(
             full_url,
             headers=_headers(session_data),
             data=build_profile_xml(entry, url),
+            verify=VERIFY_SSL,
             timeout=30,
         )
     except Exception as err:
@@ -249,7 +261,6 @@ def retire_webclip_profile(
     """Rename and unscope rather than delete, mirroring webhook delete."""
     if not entry.get("jamf_id"):
         return
-    _fresh_token(session_data)
     name = xml_escape(
         f"{PROFILE_PREFIX}{_label(entry)}.old.{time.time()}"
     )
@@ -265,8 +276,13 @@ def retire_webclip_profile(
         f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
     )
     try:
+        _fresh_token(session_data)
         resp = requests.put(
-            full_url, headers=_headers(session_data), data=body, timeout=30
+            full_url,
+            headers=_headers(session_data),
+            data=body,
+            verify=VERIFY_SSL,
+            timeout=30,
         )
         if resp.status_code >= 400:
             logthis.error(
@@ -280,12 +296,19 @@ def retire_webclip_profile(
 def register_profile(
     entry: Dict[str, Any], session_data: Dict[str, Any], wanted: bool
 ) -> None:
-    """Fill jamf_id/profile_status on a freshly built entry."""
-    if not wanted:
+    """Fill jamf_id/profile_status on a freshly built entry.
+
+    Web Clips are a mobile device management profile payload; Jamf Pro
+    has no equivalent for computers, so a computer-family service is
+    always skipped regardless of the checkbox.
+    """
+    if not wanted or entry.get("device_family") != "mobile":
         entry["jamf_id"] = None
         entry["profile_status"] = "skipped"
         return
-    url = service_url(get_jawa_address() or "", entry["name"], entry["token"])
+    url = service_url(
+        get_jawa_address() or "", entry["name"], entry["token"]
+    )
     jamf_id = create_webclip_profile(entry, url, session_data)
     entry["jamf_id"] = jamf_id
     entry["profile_status"] = "created" if jamf_id else "failed"
@@ -384,16 +407,21 @@ class SelfServeHandler(AutomationHandler):
         _require_page_strings(form)
         script_path = save_script(new_file, name)
         entry = build_service_entry(name, script_path, form, session_data)
-        register_profile(
-            entry, session_data, form.get("create_profile") == "on"
-        )
+        wanted_profile = form.get("create_profile") == "on"
+        register_profile(entry, session_data, wanted_profile)
         url = service_url(jawa_address, name, entry["token"])
         logthis.info(
             f"{session_data.get('username')} created self-serve "
             f"automation {name}."
         )
         extra_notice = "Web clip URL for the configuration profile:"
-        if entry["profile_status"] == "failed":
+        if wanted_profile and entry["device_family"] != "mobile":
+            extra_notice = (
+                "Web clip profiles are created automatically for "
+                "mobile services only; create the profile by hand "
+                "with this URL:"
+            )
+        elif entry["profile_status"] == "failed":
             extra_notice = (
                 "Jamf Pro did not accept the web clip profile; create "
                 "it by hand with this URL:"
@@ -425,26 +453,39 @@ class SelfServeHandler(AutomationHandler):
             existing["script"] = save_script(
                 files["new_file"], existing["name"]
             )
-        save_all_webhooks(all_items)
+
+        extra_notice = None
+        custom_header = None
         if existing.get("jamf_id"):
-            update_webclip_profile(
-                existing,
-                service_url(
-                    get_jawa_address() or "",
-                    existing["name"],
-                    existing["token"],
-                ),
-                session_data,
+            profile_url = service_url(
+                get_jawa_address() or "",
+                existing["name"],
+                existing["token"],
             )
+            if update_webclip_profile(existing, profile_url, session_data):
+                existing["profile_status"] = "created"
+            else:
+                existing["profile_status"] = "failed"
+                extra_notice = (
+                    "Jamf Pro did not accept the profile update; "
+                    "update it by hand with this URL:"
+                )
+                custom_header = {"URL": profile_url}
+
+        save_all_webhooks(all_items)
         logthis.info(
             f"{session_data.get('username')} edited self-serve "
             f"automation {existing['name']}."
         )
-        return {
+        result = {
             "success_msg": (
                 f"Edited self-serve automation {existing['name']}."
             )
         }
+        if extra_notice:
+            result["extra_notice"] = extra_notice
+            result["custom_header"] = custom_header
+        return result
 
     def process_delete(
         self, automation: Dict, session_data: Dict
