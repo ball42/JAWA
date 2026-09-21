@@ -27,7 +27,8 @@
         <h1>{{ strings.page_title }}</h1>
         <p>{{ strings.page_description }}</p>
         <form method="POST" action="/selfserve/{{ service_name }}"
-              class="selfserve-actions">
+              class="selfserve-actions"
+              onsubmit="this.querySelector('button[type=submit]').disabled = true;">
             <input type="hidden" name="token" value="{{ token }}">
             <input type="hidden" name="id" value="{{ jss_id }}">
             <input type="hidden" name="udid" value="{{ udid }}">

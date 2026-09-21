@@ -187,6 +187,18 @@ def test_get_still_accepts_ampersand_separated_query(
     assert "Reset iPad-042?" in resp.get_data(as_text=True)
 
 
+def test_confirm_button_disables_itself_on_submit(
+    client, jawa_env, fake_popen
+):
+    """A double tap sent the erase command twice on the first live test
+    (two POSTs 1.4 s apart); the form disables its button on submit."""
+    _make_service(jawa_env)
+    body = client.get(
+        "/selfserve/reset-ipad", query_string=GOOD_QUERY
+    ).get_data(as_text=True)
+    assert "onsubmit=" in body and ".disabled = true" in body
+
+
 def test_get_escapes_query_values(client, jawa_env, fake_popen):
     _make_service(jawa_env)
     resp = client.get(
