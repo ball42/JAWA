@@ -242,7 +242,7 @@ def test_profile_xml_uses_only_mobile_schema_elements():
 def test_profile_xml_is_well_formed_and_unscoped():
     entry = {"name": "reset-ipad", "page_title": "Reset"}
     root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/?a=1&b=2"))
-    assert root.tag == "mobile_device_configuration_profile"
+    assert root.tag == "configuration_profile"
     assert (
         root.findtext("general/name")
         == "JAWA Self-Serve: Reset (reset-ipad)"

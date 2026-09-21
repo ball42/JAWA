@@ -173,13 +173,13 @@ def build_profile_xml(entry: Dict[str, Any], url: str) -> str:
     )
     plist = xml_escape(build_webclip_plist(entry, url))
     return (
-        "<mobile_device_configuration_profile><general>"
+        "<configuration_profile><general>"
         f"<name>{name}</name><description>{description}</description>"
         "<deployment_method>Install Automatically</deployment_method>"
         "<redeploy_on_update>All</redeploy_on_update>"
         f"<payloads>{plist}</payloads></general>"
         "<scope><all_mobile_devices>false</all_mobile_devices></scope>"
-        "</mobile_device_configuration_profile>"
+        "</configuration_profile>"
     )
 
 
@@ -283,12 +283,12 @@ def retire_webclip_profile(
         return
     name = xml_escape(f"{_display_name(entry)}.old.{time.time()}")
     body = (
-        "<mobile_device_configuration_profile>"
+        "<configuration_profile>"
         f"<general><name>{name}</name></general>"
         "<scope><all_mobile_devices>false</all_mobile_devices>"
         "<mobile_devices/><mobile_device_groups/><buildings/>"
         "<departments/></scope>"
-        "</mobile_device_configuration_profile>"
+        "</configuration_profile>"
     )
     full_url = (
         f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
