@@ -128,14 +128,24 @@ def _display_name(entry: Dict[str, Any]) -> str:
     return f"{PROFILE_PREFIX}{_label(entry)} ({entry['name']})"
 
 
-def _uuid_for(identifier: str) -> str:
-    """A deterministic PayloadUUID so re-building the same profile
-    (e.g. on edit) does not needlessly change every UUID."""
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, identifier)).upper()
+def _payload_uuids(entry: Dict[str, Any]) -> Tuple[str, str]:
+    """(profile UUID, web clip payload UUID) for this service.
+
+    Minted once at create time and stored on the record, so edit and
+    retire rebuild the same profile. Random, never derived from the
+    name: Jamf keeps a retired profile (renamed, unscoped), so a
+    service deleted and re-created under the same name must not reuse
+    its UUIDs -- Jamf answers 409 "Duplicate payload uuid".
+    """
+    return (
+        str(entry.get("profile_uuid") or uuid.uuid4()).upper(),
+        str(entry.get("clip_uuid") or uuid.uuid4()).upper(),
+    )
 
 
 def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
     name = entry["name"]
+    profile_uuid, clip_uuid = _payload_uuids(entry)
     base_id = f"com.jamf.jawa.selfserve.{name}"
     payload = {
         "PayloadContent": [
@@ -149,7 +159,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
                 "PayloadDisplayName": "Web Clip",
                 "PayloadIdentifier": f"{base_id}.webclip",
                 "PayloadType": "com.apple.webClip.managed",
-                "PayloadUUID": _uuid_for(f"{base_id}.webclip"),
+                "PayloadUUID": clip_uuid,
                 "PayloadVersion": 1,
                 "Precomposed": True,
                 "URL": url,
@@ -161,7 +171,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
         "PayloadRemovalDisallowed": True,
         "PayloadScope": "System",
         "PayloadType": "Configuration",
-        "PayloadUUID": _uuid_for(base_id),
+        "PayloadUUID": profile_uuid,
         "PayloadVersion": 1,
     }
     return plistlib.dumps(payload, fmt=plistlib.FMT_XML).decode("utf-8")
@@ -325,6 +335,8 @@ def register_profile(
     has no equivalent for computers, so a computer-family service is
     always skipped regardless of the checkbox.
     """
+    entry.setdefault("profile_uuid", str(uuid.uuid4()).upper())
+    entry.setdefault("clip_uuid", str(uuid.uuid4()).upper())
     if not wanted or entry.get("device_family") != "mobile":
         entry["jamf_id"] = None
         entry["profile_status"] = "skipped"

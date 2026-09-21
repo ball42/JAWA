@@ -236,6 +236,51 @@ def test_plist_is_a_managed_web_clip_with_the_service_url():
     )
 
 
+def test_plist_uuids_are_random_when_the_record_stores_none():
+    """Deterministic uuid5 UUIDs collided with a retired profile's when
+    a service was deleted and re-created under the same name: Jamf
+    keeps the retired profile (renamed, unscoped) and answered 409
+    "Duplicate payload uuid" (live, 2026-09-21)."""
+    entry = {"name": "reset-ipad", "page_title": "Reset"}
+    a = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    b = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    assert a["PayloadUUID"] != b["PayloadUUID"]
+    assert (
+        a["PayloadContent"][0]["PayloadUUID"]
+        != b["PayloadContent"][0]["PayloadUUID"]
+    )
+
+
+def test_plist_uuids_come_from_the_record_when_stored():
+    entry = {
+        "name": "reset-ipad",
+        "page_title": "Reset",
+        "profile_uuid": "11111111-2222-4333-8444-555555555555",
+        "clip_uuid": "66666666-7777-4888-8999-AAAAAAAAAAAA",
+    }
+    plist = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    assert plist["PayloadUUID"] == entry["profile_uuid"]
+    assert plist["PayloadContent"][0]["PayloadUUID"] == entry["clip_uuid"]
+
+
+def test_create_stores_the_profile_uuids_on_the_record(
+    logged_in_client, jawa_env, profile_jamf
+):
+    import uuid as uuid_mod
+
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    uuid_mod.UUID(entry["profile_uuid"])
+    uuid_mod.UUID(entry["clip_uuid"])
+    _, kwargs = profile_jamf.posts[0]
+    assert entry["profile_uuid"] in kwargs["data"]
+    assert entry["clip_uuid"] in kwargs["data"]
+
+
 def test_profile_xml_uses_only_mobile_schema_elements():
     """Jamf Pro's mobiledeviceconfigurationprofiles schema has
     deployment_method; distribution_method belongs to the macOS
