@@ -225,6 +225,20 @@ def test_plist_is_a_managed_web_clip_with_the_service_url():
     )
 
 
+def test_profile_xml_uses_only_mobile_schema_elements():
+    """Jamf Pro's mobiledeviceconfigurationprofiles schema has
+    deployment_method; distribution_method belongs to the macOS
+    (osxconfigurationprofiles) schema. Sending it makes Jamf answer
+    400 "Error in XML file. Possible mismatch between resource
+    specified in the URL and XML file" (seen live 2026-09-21)."""
+    entry = {"name": "reset-ipad", "page_title": "Reset"}
+    root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/"))
+    assert root.find("general/distribution_method") is None
+    assert root.findtext("general/deployment_method") == (
+        "Install Automatically"
+    )
+
+
 def test_profile_xml_is_well_formed_and_unscoped():
     entry = {"name": "reset-ipad", "page_title": "Reset"}
     root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/?a=1&b=2"))

@@ -175,7 +175,6 @@ def build_profile_xml(entry: Dict[str, Any], url: str) -> str:
     return (
         "<mobile_device_configuration_profile><general>"
         f"<name>{name}</name><description>{description}</description>"
-        "<distribution_method>Install Automatically</distribution_method>"
         "<deployment_method>Install Automatically</deployment_method>"
         "<redeploy_on_update>All</redeploy_on_update>"
         f"<payloads>{plist}</payloads></general>"
