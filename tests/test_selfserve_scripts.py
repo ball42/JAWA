@@ -78,3 +78,36 @@ def test_brander_accepts_a_matching_udid_case_insensitively(
 ):
     device = brander_module.fetch_verified_device(42, "real-udid")
     assert device == {"general": {"udid": "REAL-UDID"}}
+
+
+def test_rts_wifi_profile_is_a_valid_apple_payload(rts_module):
+    """The device rejected the erase with 'The required field
+    "PayloadVersion" is missing' (live, 2026-09-21): the Wi-Fi plist
+    embedded in returnToService lacked PayloadVersion and
+    EncryptionType, which Apple requires on every payload."""
+    import plistlib
+    import uuid
+
+    raw = rts_module.build_wifi_profile("Corp", "WPA2", "hunter2")
+    top = plistlib.loads(raw)
+    assert top["PayloadType"] == "Configuration"
+    assert top["PayloadVersion"] == 1
+    uuid.UUID(top["PayloadUUID"])
+    wifi = top["PayloadContent"][0]
+    assert wifi["PayloadType"] == "com.apple.wifi.managed"
+    assert wifi["PayloadVersion"] == 1
+    uuid.UUID(wifi["PayloadUUID"])
+    assert wifi["SSID_STR"] == "Corp"
+    assert wifi["EncryptionType"] == "WPA2"
+    assert wifi["Password"] == "hunter2"
+    assert wifi["AutoJoin"] is True
+
+
+def test_rts_wifi_profile_open_network_omits_password(rts_module):
+    import plistlib
+
+    wifi = plistlib.loads(
+        rts_module.build_wifi_profile("Guest", "None", "none")
+    )["PayloadContent"][0]
+    assert "Password" not in wifi
+    assert wifi["EncryptionType"] == "None"

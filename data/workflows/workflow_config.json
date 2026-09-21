@@ -319,11 +319,24 @@
             },
             {
                 "key": "wifi_ssid",
-                "label": "WiFi SSID",
+                "label": "Wi-Fi SSID",
                 "placeholder": "Corporate-WiFi",
-                "token": "__JAWA_WIFI_SSID__",
-                "raw": true,
+                "token": "\"__JAWA_WIFI_SSID__\"",
                 "type": "text"
+            },
+            {
+                "key": "wifi_encryption",
+                "label": "Wi-Fi encryption (WPA2, WPA3, WPA, WEP, Any, None)",
+                "placeholder": "WPA2",
+                "token": "\"__JAWA_WIFI_ENCRYPTION__\"",
+                "type": "text"
+            },
+            {
+                "key": "wifi_password",
+                "label": "Wi-Fi password (enter none for an open network)",
+                "placeholder": "",
+                "token": "\"__JAWA_WIFI_PASSWORD__\"",
+                "type": "password"
             }
         ],
         "exit_codes": [

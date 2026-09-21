@@ -14,8 +14,10 @@ found; 22 device has no managementId; 23 erase command refused.
 
 import base64
 import json
+import plistlib
 import sys
 import time
+import uuid
 
 import requests
 
@@ -95,19 +97,39 @@ def perform_api_call(endpoint, method="GET", data=None, api="classic"):
 # --- end canonical block ---
 
 
-# WiFi profile XML (base64 will be encoded at runtime)
-WIFI_PAYLOAD = b"""<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1"><dict>
-  <key>PayloadUUID</key><string>RTS-UNIQUE-UUID</string>
-  <key>PayloadType</key><string>Configuration</string>
-  <key>PayloadIdentifier</key><string>RTS-UNIQUE-UUID</string>
-  <key>PayloadContent</key><array><dict>
-    <key>PayloadType</key><string>com.apple.wifi.managed</string>
-    <key>SSID_STR</key><string>__JAWA_WIFI_SSID__</string>
-    <key>AutoJoin</key><true/>
-    <key>CaptiveBypass</key><true/>
-  </dict></array>
-</dict></plist>"""
+# Wi-Fi profile the device joins during Return to Service. Built with
+# plistlib so every payload carries the keys Apple requires
+# (PayloadVersion, EncryptionType, UUIDs); a hand-written plist without
+# them made the device reject the erase command outright.
+WIFI_SSID = "__JAWA_WIFI_SSID__"
+WIFI_ENCRYPTION = "__JAWA_WIFI_ENCRYPTION__"  # WPA2, WPA3, WPA, WEP, Any, None
+WIFI_PASSWORD = "__JAWA_WIFI_PASSWORD__"  # "none" for an open network
+
+
+def build_wifi_profile(ssid, encryption, password):
+    """Return the Wi-Fi configuration profile as plist bytes."""
+    wifi = {
+        "PayloadType": "com.apple.wifi.managed",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": "com.jamf.jawa.rts.wifi",
+        "PayloadUUID": str(uuid.uuid4()).upper(),
+        "PayloadDisplayName": "Wi-Fi",
+        "SSID_STR": ssid,
+        "EncryptionType": encryption,
+        "AutoJoin": True,
+        "CaptiveBypass": True,
+    }
+    if password and password.strip().lower() != "none":
+        wifi["Password"] = password
+    profile = {
+        "PayloadType": "Configuration",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": "com.jamf.jawa.rts",
+        "PayloadUUID": str(uuid.uuid4()).upper(),
+        "PayloadDisplayName": "Return to Service Wi-Fi",
+        "PayloadContent": [wifi],
+    }
+    return plistlib.dumps(profile, fmt=plistlib.FMT_XML)
 
 
 def fetch_verified_device(jss_id, udid):
@@ -146,7 +168,9 @@ def main():
         print(f"Device {jss_id} has no managementId; cannot send MDM.")
         sys.exit(22)
 
-    wifi_b64 = base64.b64encode(WIFI_PAYLOAD).decode("ascii")
+    wifi_b64 = base64.b64encode(
+        build_wifi_profile(WIFI_SSID, WIFI_ENCRYPTION, WIFI_PASSWORD)
+    ).decode("ascii")
     erase_json = {
         "clientData": [{"managementId": mgmt_id}],
         "commandData": {

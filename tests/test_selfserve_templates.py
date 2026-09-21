@@ -102,7 +102,7 @@ def test_enabling_creates_a_selfserve_record_that_fires(
     with open(entry["script"], encoding="utf-8") as handle:
         source = handle.read()
     assert "__JAWA_" not in source
-    assert "Corporate-WiFi" in source
+    assert form["wifi_ssid"] in source
 
     resp = logged_in_client.post(
         "/selfserve/reset-ipad",
