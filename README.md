@@ -180,8 +180,12 @@ show a success or failure page.
 The web clip's URL points at JAWA:
 
 ```
-https://<jawa>/selfserve/<service-name>?token=<service token>&id=$JSSID&udid=$UDID&DEVICENAME=$DEVICENAME&SERIALNUMBER=$SERIALNUMBER
+https://<jawa>/selfserve/<service-name>?token=<service token>;id=$JSSID;udid=$UDID;DEVICENAME=$DEVICENAME;SERIALNUMBER=$SERIALNUMBER
 ```
+
+Parameters are separated with `;` rather than `&` on purpose: Jamf Pro refuses to save a web clip
+profile whose URL contains an ampersand in any encoding (it answers `409 Unable to update the
+database`). JAWA accepts either separator on `/selfserve/`, so a hand-built profile may use `;` too.
 
 `token`, `id`, and `udid` are reserved and required. `token` is the automation's per-service
 token; `id` and `udid` are Jamf Pro payload variables (`$JSSID`, `$UDID`), substituted per device

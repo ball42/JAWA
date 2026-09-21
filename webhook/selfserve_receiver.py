@@ -39,6 +39,7 @@ Self-serve section of README.md for the URL and payload contract.
 import hmac
 import re
 import time
+from urllib.parse import unquote_plus
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from flask import Blueprint, render_template, request
@@ -149,6 +150,24 @@ def load_service(name: str) -> Optional[Dict[str, Any]]:
     return entry
 
 
+def query_fields() -> Dict[str, str]:
+    """The GET query string as a dict, split on ';' or '&'.
+
+    The web clip URL Jamf Pro deploys joins parameters with ';'
+    because Jamf refuses to store a web clip payload containing '&'.
+    Werkzeug splits only on '&', so parse the raw query string here.
+    Later duplicates win, matching the usual last-value behaviour.
+    """
+    raw = request.query_string.decode("utf-8", errors="replace")
+    fields: Dict[str, str] = {}
+    for pair in re.split(r"[&;]", raw):
+        if not pair:
+            continue
+        key, _, value = pair.partition("=")
+        fields[unquote_plus(key)] = unquote_plus(value)
+    return fields
+
+
 def _remote_address() -> str:
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
@@ -191,15 +210,16 @@ def _page_strings(service: Dict[str, Any], params: Dict[str, str]):
 def service_page(service_name: str):
     logthis.info(f"Incoming GET at /selfserve/{service_name} ...")
     try:
-        service = _authorize(service_name, request.args)
-        jss_id, udid, params = parse_device_request(request.args)
+        fields = query_fields()
+        service = _authorize(service_name, fields)
+        jss_id, udid, params = parse_device_request(fields)
     except SelfServeRequestError as err:
         return err.message, err.status
     return render_template(
         "selfserve/confirm.html",
         service_name=service["name"],
         strings=_page_strings(service, params),
-        token=request.args.get("token", ""),
+        token=fields.get("token", ""),
         jss_id=jss_id,
         udid=udid,
         params=params,

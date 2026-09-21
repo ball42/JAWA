@@ -48,6 +48,17 @@ def test_service_url_carries_token_and_reserved_variables():
     assert "DEVICENAME=$DEVICENAME" in url
 
 
+def test_service_url_never_contains_an_ampersand():
+    """Jamf Pro refuses to store a web clip profile whose URL contains
+    '&' in any encoding (409 "Unable to update the database", probed
+    live 2026-09-21), so parameters are joined with ';'. Reserved
+    params come first so a display value cannot disturb them."""
+    url = ssh.service_url("https://jawa.example.test", "reset-ipad", "T")
+    assert "&" not in url
+    query = url.split("?", 1)[1]
+    assert query.split(";")[:3] == ["token=T", "id=$JSSID", "udid=$UDID"]
+
+
 def test_mint_token_is_long_and_unique():
     a, b = ssh.mint_token(), ssh.mint_token()
     assert a != b
@@ -187,8 +198,8 @@ class _ProfileJamf:
             return self._fake_response_cls(
                 {},
                 status_code=self.status,
-                text="<mobile_device_configuration_profile><id>55</id>"
-                "</mobile_device_configuration_profile>",
+                text="<configuration_profile><id>55</id>"
+                "</configuration_profile>",
             )
         return self._fake_post(url, **kwargs)
 

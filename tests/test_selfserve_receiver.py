@@ -158,6 +158,35 @@ def test_get_renders_confirmation_with_filled_placeholders(
     assert fake_popen.calls == []
 
 
+def test_get_accepts_semicolon_separated_query(
+    client, jawa_env, fake_popen
+):
+    """The web clip URL Jamf deploys uses ';' between parameters (Jamf
+    rejects '&' inside a web clip payload), and Werkzeug only splits
+    on '&' -- so the receiver parses the raw query string itself."""
+    _make_service(jawa_env)
+    resp = client.get(
+        "/selfserve/reset-ipad?token=" + TOKEN
+        + ";id=42;udid=00008030-000A1B2C3D4E5F67;DEVICENAME=iPad%20042"
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Reset iPad 042?" in body
+    assert 'value="42"' in body
+
+
+def test_get_still_accepts_ampersand_separated_query(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    resp = client.get(
+        "/selfserve/reset-ipad?token=" + TOKEN
+        + "&id=42&udid=00008030-000A1B2C3D4E5F67&DEVICENAME=iPad-042"
+    )
+    assert resp.status_code == 200
+    assert "Reset iPad-042?" in resp.get_data(as_text=True)
+
+
 def test_get_escapes_query_values(client, jawa_env, fake_popen):
     _make_service(jawa_env)
     resp = client.get(

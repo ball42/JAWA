@@ -90,12 +90,17 @@ def service_url(jawa_address: str, name: str, token: str) -> str:
     """The URL to paste into the Web Clip payload.
 
     ``$JSSID`` etc. are Jamf Pro payload variables, substituted per
-    device when the profile installs.
+    device when the profile installs. Parameters are joined with ';'
+    rather than '&': Jamf Pro refuses to store a web clip profile
+    whose URL contains an ampersand in any encoding (409 "Unable to
+    update the database"). The receiver splits on either separator.
+    Reserved parameters come first so a display value carrying a
+    separator cannot disturb them.
     """
-    display = "&".join(f"{v}=${v}" for v in DISPLAY_VARIABLES)
+    display = ";".join(f"{v}=${v}" for v in DISPLAY_VARIABLES)
     return (
         f"{jawa_address.rstrip('/')}/selfserve/{name}"
-        f"?token={token}&id=$JSSID&udid=$UDID&{display}"
+        f"?token={token};id=$JSSID;udid=$UDID;{display}"
     )
 
 
