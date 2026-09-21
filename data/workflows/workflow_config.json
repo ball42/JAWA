@@ -293,6 +293,7 @@
         },
         "api_privileges": [
             "Read Mobile Devices",
+            "Read Mobile Device Configuration Profiles",
             "Send Mobile Device Erase Device Command"
         ],
         "config_params": [
@@ -318,25 +319,11 @@
                 "type": "password"
             },
             {
-                "key": "wifi_ssid",
-                "label": "Wi-Fi SSID",
-                "placeholder": "Corporate-WiFi",
-                "token": "\"__JAWA_WIFI_SSID__\"",
+                "key": "wifi_profile_name",
+                "label": "Wi-Fi configuration profile name (existing, in Jamf Pro)",
+                "placeholder": "Managed WiFi",
+                "token": "\"__JAWA_WIFI_PROFILE_NAME__\"",
                 "type": "text"
-            },
-            {
-                "key": "wifi_encryption",
-                "label": "Wi-Fi encryption (WPA2, WPA3, WPA, WEP, Any, None)",
-                "placeholder": "WPA2",
-                "token": "\"__JAWA_WIFI_ENCRYPTION__\"",
-                "type": "text"
-            },
-            {
-                "key": "wifi_password",
-                "label": "Wi-Fi password (enter none for an open network)",
-                "placeholder": "",
-                "token": "\"__JAWA_WIFI_PASSWORD__\"",
-                "type": "password"
             }
         ],
         "exit_codes": [
@@ -345,7 +332,9 @@
             {"code": 20, "meaning": "UDID did not match the device record (refused)"},
             {"code": 21, "meaning": "Device id not found in Jamf Pro"},
             {"code": 22, "meaning": "Device has no managementId"},
-            {"code": 23, "meaning": "Erase command refused by Jamf Pro"}
+            {"code": 23, "meaning": "Erase command refused by Jamf Pro"},
+            {"code": 24, "meaning": "Wi-Fi configuration profile not found in Jamf Pro"},
+            {"code": 25, "meaning": "Named profile carries no Wi-Fi payload"}
         ],
         "tags": ["self-serve", "web-clip", "mobile", "erase", "return-to-service"],
         "order": 9

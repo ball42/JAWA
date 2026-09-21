@@ -237,7 +237,8 @@ the web clip URL so you can build the profile by hand.
 **Bundled templates**
 
 - **Return to Service (Self-Serve).** Lets the person holding a shared iPad or iPhone erase it
-  and re-enroll it themselves, with no IT touch.
+  and re-enroll it themselves, with no IT touch. The Wi-Fi the device rejoins comes from an
+  existing Wi-Fi configuration profile in Jamf Pro, named when you enable the template.
 - **Brander (Self-Serve).** Lets the person holding an iPad or iPhone apply a branded wallpaper
   showing the device's name, serial, location, and a QR code of its Jamf Pro id; it needs Pillow
   and qrcode, which the installer installs from `requirements.txt`.

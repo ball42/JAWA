@@ -80,34 +80,50 @@ def test_brander_accepts_a_matching_udid_case_insensitively(
     assert device == {"general": {"udid": "REAL-UDID"}}
 
 
-def test_rts_wifi_profile_is_a_valid_apple_payload(rts_module):
-    """The device rejected the erase with 'The required field
-    "PayloadVersion" is missing' (live, 2026-09-21): the Wi-Fi plist
-    embedded in returnToService lacked PayloadVersion and
-    EncryptionType, which Apple requires on every payload."""
-    import plistlib
-    import uuid
+def test_rts_fetches_the_named_wifi_profile_from_jamf(rts_module):
+    """Return to Service reuses a Wi-Fi configuration profile that
+    already exists in Jamf Pro (looked up by name), so the payload the
+    device receives is one Jamf built -- nothing is typed by hand."""
+    seen = {}
 
-    raw = rts_module.build_wifi_profile("Corp", "WPA2", "hunter2")
-    top = plistlib.loads(raw)
-    assert top["PayloadType"] == "Configuration"
-    assert top["PayloadVersion"] == 1
-    uuid.UUID(top["PayloadUUID"])
-    wifi = top["PayloadContent"][0]
-    assert wifi["PayloadType"] == "com.apple.wifi.managed"
-    assert wifi["PayloadVersion"] == 1
-    uuid.UUID(wifi["PayloadUUID"])
-    assert wifi["SSID_STR"] == "Corp"
-    assert wifi["EncryptionType"] == "WPA2"
-    assert wifi["Password"] == "hunter2"
-    assert wifi["AutoJoin"] is True
+    def fake_api(endpoint, method="GET", data=None, api="classic"):
+        seen["endpoint"] = endpoint
+        return {"configuration_profile": {"general": {"payloads": (
+            '<?xml version="1.0" encoding="UTF-8"?><plist version="1">'
+            "<dict><key>PayloadContent</key><array><dict>"
+            "<key>PayloadType</key><string>com.apple.wifi.managed</string>"
+            "</dict></array></dict></plist>"
+        )}}}
+
+    rts_module.perform_api_call = fake_api
+    plist = rts_module.fetch_wifi_profile_plist("Managed WiFi - MCP")
+    assert seen["endpoint"] == (
+        "mobiledeviceconfigurationprofiles/name/Managed%20WiFi%20-%20MCP"
+    )
+    assert b"com.apple.wifi.managed" in plist
 
 
-def test_rts_wifi_profile_open_network_omits_password(rts_module):
-    import plistlib
+def test_rts_refuses_a_profile_that_is_not_wifi(rts_module):
+    rts_module.perform_api_call = lambda *a, **k: {
+        "configuration_profile": {"general": {"payloads": (
+            "<plist><dict><key>PayloadType</key>"
+            "<string>com.apple.webClip.managed</string></dict></plist>"
+        )}}
+    }
+    with pytest.raises(SystemExit) as excinfo:
+        rts_module.fetch_wifi_profile_plist("Web Clip")
+    assert excinfo.value.code == 25
 
-    wifi = plistlib.loads(
-        rts_module.build_wifi_profile("Guest", "None", "none")
-    )["PayloadContent"][0]
-    assert "Password" not in wifi
-    assert wifi["EncryptionType"] == "None"
+
+def test_rts_exits_when_the_wifi_profile_is_missing(rts_module):
+    import requests
+
+    def not_found(*a, **k):
+        resp = requests.Response()
+        resp.status_code = 404
+        raise requests.HTTPError(response=resp)
+
+    rts_module.perform_api_call = not_found
+    with pytest.raises(SystemExit) as excinfo:
+        rts_module.fetch_wifi_profile_plist("Nope")
+    assert excinfo.value.code == 24
