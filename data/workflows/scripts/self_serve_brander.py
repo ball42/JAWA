@@ -17,6 +17,7 @@ found; 24 wallpaper command refused; 42 Brander EA is Off.
 import base64
 import json
 import os
+import re
 import sys
 import time
 
@@ -150,9 +151,26 @@ def find_role(device):
     if not role:
         return "null", ""
     basename = role.replace(" ", "").lower()
-    if os.path.isfile(os.path.join(ASSETS_DIR, f"{basename}.png")):
+    if _safe_role_image(basename):
         return basename, role
     return "lockscreen-template", role
+
+
+ROLE_NAME = re.compile(r"^[a-z0-9_-]{1,64}$")
+
+
+def _safe_role_image(basename):
+    """True if <basename>.png is a real file inside ASSETS_DIR.
+
+    The role is an extension attribute the device side can set, so it is
+    untrusted: only plain names are allowed, and the resolved path (after
+    symlinks) must stay inside the assets directory.
+    """
+    if not ROLE_NAME.match(basename):
+        return False
+    assets = os.path.realpath(ASSETS_DIR)
+    candidate = os.path.realpath(os.path.join(assets, f"{basename}.png"))
+    return candidate.startswith(assets + os.sep) and os.path.isfile(candidate)
 
 
 def _centered(draw, font, text, img_w, y, color):

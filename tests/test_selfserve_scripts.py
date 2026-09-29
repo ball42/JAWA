@@ -78,3 +78,52 @@ def test_brander_accepts_a_matching_udid_case_insensitively(
 ):
     device = brander_module.fetch_verified_device(42, "real-udid")
     assert device == {"general": {"udid": "REAL-UDID"}}
+
+
+# --- find_role must never leave the Brander assets directory ------------------
+# The role comes from a Jamf extension attribute that the device side can set
+# (Jamf Setup), so it is untrusted: "../x" or an absolute path used to select
+# any .png on the JAWA host as the wallpaper background.
+
+@pytest.fixture()
+def role_assets(tmp_path, brander_module):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    for name in ("lockscreen-template", "null", "videoconferencing", "nursing"):
+        (assets / f"{name}.png").write_bytes(b"png")
+    (tmp_path / "secret.png").write_bytes(b"outside the assets dir")
+    brander_module.ASSETS_DIR = str(assets)
+    brander_module.EA_ID = 7
+    return brander_module, tmp_path
+
+
+def _device(role):
+    return {"extension_attributes": [{"id": 7, "name": "Setup Role", "value": role}]}
+
+
+@pytest.mark.parametrize("role", [
+    "../secret", "..", "../../secret", "..%2fsecret", "/tmp/secret", "nursing/../../secret",
+    "x" * 65, "Nürsing",
+])
+def test_brander_role_cannot_escape_the_assets_directory(role_assets, role):
+    module, _ = role_assets
+    basename, _label = module.find_role(_device(role))
+    assert basename == "lockscreen-template"
+
+
+def test_brander_role_symlink_out_of_assets_is_refused(role_assets):
+    module, tmp_path = role_assets
+    os.symlink(tmp_path / "secret.png", os.path.join(module.ASSETS_DIR, "evil.png"))
+    basename, _label = module.find_role(_device("evil"))
+    assert basename == "lockscreen-template"
+
+
+@pytest.mark.parametrize("role,expected", [
+    ("Video Conferencing", "videoconferencing"),
+    ("NURSING", "nursing"),
+    ("Pharmacist", "lockscreen-template"),  # no image shipped for it
+    ("", "null"),
+])
+def test_brander_real_roles_still_match(role_assets, role, expected):
+    module, _ = role_assets
+    assert module.find_role(_device(role))[0] == expected
