@@ -390,6 +390,21 @@ def _require_device_family(form: Mapping[str, Any]) -> str:
     return family
 
 
+MAX_COOLDOWN_MINUTES = 1440
+
+
+def _require_cooldown(form: Mapping[str, Any]) -> int:
+    """Minutes before a device may run the service again; 0 = no limit."""
+    text = str(form.get("cooldown_minutes") or "0").strip()
+    if not text.isdigit() or int(text) > MAX_COOLDOWN_MINUTES:
+        raise AutomationError(
+            "Error",
+            "Cooldown must be a whole number of minutes from 0 to "
+            f"{MAX_COOLDOWN_MINUTES}.",
+        )
+    return int(text)
+
+
 def build_service_entry(
     name: str,
     script_path: str,
@@ -402,6 +417,7 @@ def build_service_entry(
     validate_webhook_name(name)
     family = _require_device_family(form)
     strings = _require_page_strings(form)
+    cooldown = _require_cooldown(form)
     entry = {
         "name": name,
         "tag": "selfserve",
@@ -411,6 +427,7 @@ def build_service_entry(
         "description": description or form.get("description", ""),
         "token": mint_token(),
         "device_family": family,
+        "cooldown_minutes": cooldown,
         "jamf_id": None,
         "profile_status": "skipped",
         "webhook_username": "null",
@@ -419,6 +436,13 @@ def build_service_entry(
     }
     entry.update(strings)
     return entry
+
+
+def _cooldown_label(automation: Dict[str, Any]) -> str:
+    minutes = int(automation.get("cooldown_minutes") or 0)
+    if not minutes:
+        return "None"
+    return f"{minutes} minute{'s' if minutes != 1 else ''} per device"
 
 
 class SelfServeHandler(AutomationHandler):
@@ -456,6 +480,7 @@ class SelfServeHandler(AutomationHandler):
         # leave an orphaned script behind.
         _require_device_family(form)
         _require_page_strings(form)
+        _require_cooldown(form)
         script_path = save_script(new_file, name)
         entry = build_service_entry(name, script_path, form, session_data)
         wanted_profile = form.get("create_profile") == "on"
@@ -496,8 +521,10 @@ class SelfServeHandler(AutomationHandler):
     ) -> Dict[str, Any]:
         strings = _require_page_strings(form)
         family = _require_device_family(form)
+        cooldown = _require_cooldown(form)
         existing.update(strings)
         existing["device_family"] = family
+        existing["cooldown_minutes"] = cooldown
         if form.get("description"):
             existing["description"] = form.get("description")
         if files.get("new_file") and files["new_file"].filename:
@@ -558,6 +585,7 @@ class SelfServeHandler(AutomationHandler):
                 ),
             ),
             ("Device family", automation.get("device_family", "")),
+            ("Cooldown", _cooldown_label(automation)),
             ("Script path", automation.get("script", "")),
             ("Description", automation.get("description", "")),
             ("Created by", automation.get("jawa_admin", "")),

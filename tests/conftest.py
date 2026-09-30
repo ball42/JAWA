@@ -188,6 +188,11 @@ def jawa_env(tmp_path, monkeypatch):
     log_file = str(env.log_file)
 
     monkeypatch.setattr(data_store, "WEBHOOKS_FILE", webhooks)
+    monkeypatch.setattr(
+        data_store,
+        "COOLDOWNS_FILE",
+        str(env.data_dir / "selfserve_cooldowns.json"),
+    )
     monkeypatch.setattr(data_store, "CRON_FILE", cron)
     monkeypatch.setattr(data_store, "SERVER_FILE", server)
     monkeypatch.setattr(

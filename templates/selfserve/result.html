@@ -18,6 +18,7 @@
     .selfserve-card p { font-size: 1.05rem; }
     .selfserve-ok { color: var(--color-success, #2e7d32); }
     .selfserve-failed { color: var(--color-danger, #d63447); }
+    .selfserve-cooldown { color: var(--color-warning, #b26a00); }
     .selfserve-actions { margin-top: 2rem; }
     .selfserve-actions .btn { min-width: 12rem; font-size: 1.05rem; }
 </style>
@@ -27,7 +28,9 @@
 <div class="container">
     <div class="selfserve-card">
         <h1>{{ strings.page_title }}</h1>
-        {% if succeeded %}
+        {% if cooldown %}
+        <p class="selfserve-cooldown">{{ cooldown }}</p>
+        {% elif succeeded %}
         <p class="selfserve-ok">{{ strings.success_message }}</p>
         {% else %}
         <p class="selfserve-failed">{{ strings.failure_message }}</p>

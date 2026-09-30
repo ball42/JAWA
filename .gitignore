@@ -162,5 +162,6 @@ data/server.json
 data/credentials.json
 data/cron.json
 data/webhooks.json
+data/selfserve_cooldowns.json
 resources/files/
 /scripts/

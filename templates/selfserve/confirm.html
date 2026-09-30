@@ -17,6 +17,7 @@
     .selfserve-card h1 { font-size: 1.6rem; margin-bottom: 1rem; }
     .selfserve-card p { color: var(--color-text-secondary); }
     .selfserve-actions { margin-top: 2rem; }
+    .selfserve-cooldown { color: var(--color-warning, #b26a00); }
     .selfserve-actions .btn { min-width: 12rem; font-size: 1.05rem; }
 </style>
 {% endblock %}
@@ -35,9 +36,16 @@
             {% for key, value in params.items() %}
             <input type="hidden" name="{{ key }}" value="{{ value }}">
             {% endfor %}
+            {% if cooldown %}
+            <p class="selfserve-cooldown">{{ cooldown }}</p>
+            <button type="submit" class="btn btn-jawa" disabled data-cooldown>
+                {{ strings.confirm_label }}
+            </button>
+            {% else %}
             <button type="submit" class="btn btn-jawa">
                 {{ strings.confirm_label }}
             </button>
+            {% endif %}
         </form>
     </div>
 </div>
@@ -48,7 +56,9 @@
     // Going back from the result page restores this page from the
     // back-forward cache with the button still disabled by onsubmit.
     window.addEventListener('pageshow', function () {
-        document.querySelectorAll('.selfserve-actions button[type=submit]')
+        // A cooldown's button stays disabled: the server refuses it anyway.
+        document.querySelectorAll(
+            '.selfserve-actions button[type=submit]:not([data-cooldown])')
             .forEach(function (button) { button.disabled = false; });
     });
 </script>
