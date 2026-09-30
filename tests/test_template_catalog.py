@@ -451,6 +451,38 @@ def test_blank_param_with_a_default_uses_the_default():
     assert out == "T = 'legacy'\nK = 1500\n"
 
 
+
+def test_blank_param_without_a_default_is_still_missing():
+    from views import template_view
+    from views._type_handlers.base import AutomationError
+
+    workflow = {
+        "config_params": [
+            {"key": "path", "label": "Path", "token": '"__JAWA_P__"',
+             "type": "text"}
+        ]
+    }
+    with pytest.raises(AutomationError):
+        template_view.substitute_params(
+            'P = "__JAWA_P__"\n', workflow, {"path": ""}, [], ""
+        )
+
+
+def test_whitespace_value_is_kept_when_there_is_no_default():
+    """Only params that declare a default treat blank as unset; a
+    secret that happens to be spaces must still reach the script."""
+    from views import template_view
+
+    workflow = {
+        "config_params": [
+            {"key": "secret", "token": '"__JAWA_S__"', "type": "password"}
+        ]
+    }
+    out = template_view.substitute_params(
+        'S = "__JAWA_S__"\n', workflow, {"secret": "  "}, [], ""
+    )
+    assert out == "S = '  '\n"
+
 def test_enable_form_prefills_param_defaults(logged_in_client, jawa_env):
     response = logged_in_client.get("/templates/self-serve-brander/enable")
     html = response.get_data(as_text=True)

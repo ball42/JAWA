@@ -461,6 +461,25 @@ def test_slow_template_exits_33(jamf, tmp_path, monkeypatch):
     assert jamf.commands == []
 
 
+def test_slow_encode_counts_against_the_timeout(jamf, tmp_path, monkeypatch):
+    module = load_brander(
+        template_path=write_template(tmp_path, basic_template())
+    )
+    module.RENDER_TIMEOUT = 0.2
+    monkeypatch.setattr(module, "encode_within_budget", lambda *a: time.sleep(5))
+    assert run(module) == 33
+    assert jamf.commands == []
+
+
+def test_asset_ids_with_a_trailing_newline_are_refused(tmp_path):
+    module = load_brander()
+    module.ASSETS_DIR = str(tmp_path)
+    Image.new("RGB", (4, 4)).save(tmp_path / "logo.png")
+    assert module.read_asset("logo")
+    with pytest.raises(KeyError):
+        module.read_asset("logo\n")
+
+
 # --- byte budget -------------------------------------------------------------
 
 

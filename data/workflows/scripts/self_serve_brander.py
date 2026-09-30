@@ -182,7 +182,7 @@ def _safe_role_image(basename):
     untrusted: only plain names are allowed, and the resolved path (after
     symlinks) must stay inside the assets directory.
     """
-    if not ROLE_NAME.match(basename):
+    if not ROLE_NAME.fullmatch(basename):
         return False
     assets = os.path.realpath(ASSETS_DIR)
     candidate = os.path.realpath(os.path.join(assets, f"{basename}.png"))
@@ -257,9 +257,13 @@ def run_with_timeout(func, seconds):
         raise RenderTimeout()
 
     previous = signal.signal(signal.SIGALRM, _expired)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
     try:
-        return func()
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        result = func()
+        # Disarm before leaving the try, so an alarm landing just as
+        # func() returns cannot discard a finished render.
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        return result
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
@@ -350,7 +354,7 @@ def build_values(device):
 
 def read_asset(asset_id):
     """PNG or JPEG bytes for a template asset id, from ASSETS_DIR only."""
-    if ROLE_NAME.match(asset_id):
+    if ROLE_NAME.fullmatch(asset_id):
         assets = os.path.realpath(ASSETS_DIR)
         for ext in ("png", "jpg", "jpeg"):
             path = os.path.realpath(
@@ -366,7 +370,12 @@ def render_template(renderer, template, values):
     return renderer.render(template, values, read_asset)
 
 
-def compose_template(path, device):
+def template_wallpaper(path, device, max_bytes):
+    """Render the template and encode it, both inside RENDER_TIMEOUT.
+
+    The timeout is checked between Python bytecodes, so a single Pillow
+    call finishes before it fires; wallrender's canvas caps bound how
+    long any one call can take."""
     renderer = load_renderer()
     template = load_template(path)
     problems = renderer.validate(template)
@@ -375,7 +384,10 @@ def compose_template(path, device):
         sys.exit(30)
     try:
         return run_with_timeout(
-            lambda: render_template(renderer, template, build_values(device)),
+            lambda: encode_within_budget(
+                render_template(renderer, template, build_values(device)),
+                max_bytes,
+            ),
             RENDER_TIMEOUT,
         )
     except renderer.TemplateError as err:
@@ -439,12 +451,13 @@ def main():
     basename, role = find_role(device)
     template = TEMPLATE_PATH.strip()
     if template and template.lower() != "legacy":
-        img = compose_template(template, device)
+        image = template_wallpaper(template, device, MAX_KB * 1024)
         source = os.path.basename(template)
     else:
         img = compose_legacy(ASSETS_DIR, basename, role, device)
+        image = encode_within_budget(img, MAX_KB * 1024)
         source = f"{basename}.png"
-    set_wallpaper(encode_within_budget(img, MAX_KB * 1024), jss_id)
+    set_wallpaper(image, jss_id)
     print(f"Device {jss_id}: wallpaper set ({source}).")
 
 

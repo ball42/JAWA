@@ -353,10 +353,10 @@ def substitute_params(
             value = cred[key]
         if not value:
             value = form.get(key, "")
-        if not str(value).strip():
+        if "default" in param and not str(value).strip():
             # Optional settings declare a default instead of being
             # required, so leaving them blank keeps documented behaviour.
-            value = param.get("default", "")
+            value = str(param["default"])
         if not value:
             missing.append(param.get("label", key))
             continue
