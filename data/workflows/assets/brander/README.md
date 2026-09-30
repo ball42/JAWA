@@ -5,6 +5,7 @@ Wallpaper backgrounds for the **Brander (Self-Serve)** template.
 - `lockscreen-template.png` — default background when no role matches.
 - `null.png` — background when the device has no role set.
 - `brandlogo.png` — reserved for a logo overlay (not composited by default).
+- `jawa-logo.png` — the JAWA logo (1024 px), used by the example templates as the `jawa-logo` asset.
 - `<role>.png` — one background per role, matched case-insensitively against
   the Jamf Setup extension attribute value with spaces removed
   (`Video Conferencing` → `videoconferencing.png`). The six shipped role images
@@ -23,7 +24,12 @@ device receives.
 
 - Set the template's "Wallpaper template" setting to a JSON path, absolute or
   relative to this directory. `legacy` (the default) keeps the original
-  layout. `example-template.json` is a starting point sized for an iPhone.
+  layout. Two starting points ship here:
+  - `example-template.json`: iPhone, portrait (1290x2796).
+  - `example-ipad-template.json`: iPad, square 2732x2732 with everything in
+    the centre 75%, which stays visible in both portrait and landscape.
+    iOS scales a wallpaper to fill the screen and crops the rest, so a
+    portrait iPhone template loses its top and bottom on an iPad.
 - Image layers name an asset id; Brander loads `<id>.png`, `.jpg` or `.jpeg`
   from this directory and nowhere else.
 - A template can print only these fields of the UDID-verified Jamf record:

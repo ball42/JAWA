@@ -254,11 +254,22 @@ def test_template_renders_through_wallrender(jamf, tmp_path):
         assert img.getpixel((5, 5)) == (0x0B, 0x25, 0x45)
 
 
-def test_shipped_example_template_renders(jamf):
-    module = load_brander(template_path="example-template.json")
+@pytest.mark.parametrize(
+    "name, size, logo_point",
+    [
+        ("example-template.json", (1290, 2796), (645, 1230)),
+        ("example-ipad-template.json", (2732, 2732), (1366, 1010)),
+    ],
+)
+def test_shipped_example_templates_render_with_the_logo(
+    jamf, name, size, logo_point
+):
+    module = load_brander(template_path=name)
     assert run(module) == 0
     with Image.open(io.BytesIO(jamf.sent_image())) as img:
-        assert img.size == (1290, 2796)
+        assert img.size == size
+        # Inside the logo box, not the plain background colour.
+        assert img.convert("RGB").getpixel(logo_point) != (0x0B, 0x25, 0x45)
 
 
 def test_relative_template_path_resolves_in_the_assets_dir(jamf, tmp_path):

@@ -236,6 +236,23 @@ def test_plist_is_a_managed_web_clip_with_the_service_url():
     )
 
 
+
+def test_plist_web_clip_icon_is_the_jawa_logo():
+    """The home-screen icon defaults to the JAWA logo, a precomposed
+    180x180 PNG embedded as data."""
+    import io
+
+    from PIL import Image
+
+    entry = {"name": "reset-ipad", "page_title": "Reset"}
+    plist = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    icon = plist["PayloadContent"][0]["Icon"]
+    assert isinstance(icon, bytes)
+    with Image.open(io.BytesIO(icon)) as img:
+        assert img.format == "PNG"
+        assert img.size == (180, 180)
+    assert plist["PayloadContent"][0]["Precomposed"] is True
+
 def test_plist_uuids_are_random_when_the_record_stores_none():
     """Deterministic uuid5 UUIDs collided with a retired profile's when
     a service was deleted and re-created under the same name: Jamf
