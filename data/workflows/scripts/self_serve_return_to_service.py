@@ -9,13 +9,16 @@ names ONE device by Jamf Pro id and UDID. This script:
    re-enrolls onto the configured Wi-Fi with no IT touch.
 
 Exit codes: 0 sent; 12 bad payload; 20 UDID mismatch; 21 device not
-found; 22 device has no managementId; 23 erase command refused.
+found; 22 device has no managementId; 23 erase command refused;
+24 Wi-Fi profile not found in Jamf Pro; 25 named profile has no Wi-Fi
+payload.
 """
 
 import base64
 import json
 import sys
 import time
+from urllib.parse import quote
 
 import requests
 
@@ -95,19 +98,36 @@ def perform_api_call(endpoint, method="GET", data=None, api="classic"):
 # --- end canonical block ---
 
 
-# WiFi profile XML (base64 will be encoded at runtime)
-WIFI_PAYLOAD = b"""<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1"><dict>
-  <key>PayloadUUID</key><string>RTS-UNIQUE-UUID</string>
-  <key>PayloadType</key><string>Configuration</string>
-  <key>PayloadIdentifier</key><string>RTS-UNIQUE-UUID</string>
-  <key>PayloadContent</key><array><dict>
-    <key>PayloadType</key><string>com.apple.wifi.managed</string>
-    <key>SSID_STR</key><string>__JAWA_WIFI_SSID__</string>
-    <key>AutoJoin</key><true/>
-    <key>CaptiveBypass</key><true/>
-  </dict></array>
-</dict></plist>"""
+# The Wi-Fi configuration profile the device joins during Return to
+# Service is one that already exists in Jamf Pro, looked up by name at
+# run time -- so the payload is Jamf-built and nothing is typed by hand.
+WIFI_PROFILE_NAME = "__JAWA_WIFI_PROFILE_NAME__"
+
+
+def fetch_wifi_profile_plist(name):
+    """The named mobile device configuration profile's plist, as bytes.
+
+    Exit 24 if Jamf Pro has no profile by that name, 25 if the profile
+    carries no Wi-Fi payload (Return to Service needs one).
+    """
+    try:
+        record = perform_api_call(
+            "mobiledeviceconfigurationprofiles/name/" + quote(name, safe="")
+        )
+    except requests.HTTPError as err:
+        if err.response is not None and err.response.status_code == 404:
+            print(f"No configuration profile named {name!r} in Jamf Pro.")
+            sys.exit(24)
+        raise
+    payloads = (
+        record.get("configuration_profile", {})
+        .get("general", {})
+        .get("payloads", "")
+    )
+    if "com.apple.wifi.managed" not in payloads:
+        print(f"Profile {name!r} has no Wi-Fi payload; refusing to erase.")
+        sys.exit(25)
+    return payloads.encode("utf-8")
 
 
 def fetch_verified_device(jss_id, udid):
@@ -146,7 +166,9 @@ def main():
         print(f"Device {jss_id} has no managementId; cannot send MDM.")
         sys.exit(22)
 
-    wifi_b64 = base64.b64encode(WIFI_PAYLOAD).decode("ascii")
+    wifi_b64 = base64.b64encode(
+        fetch_wifi_profile_plist(WIFI_PROFILE_NAME)
+    ).decode("ascii")
     erase_json = {
         "clientData": [{"managementId": mgmt_id}],
         "commandData": {

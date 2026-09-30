@@ -180,8 +180,12 @@ show a success or failure page.
 The web clip's URL points at JAWA:
 
 ```
-https://<jawa>/selfserve/<service-name>?token=<service token>&id=$JSSID&udid=$UDID&DEVICENAME=$DEVICENAME&SERIALNUMBER=$SERIALNUMBER
+https://<jawa>/selfserve/<service-name>?token=<service token>;id=$JSSID;udid=$UDID;DEVICENAME=$DEVICENAME;SERIALNUMBER=$SERIALNUMBER
 ```
+
+Parameters are separated with `;` rather than `&` on purpose: Jamf Pro refuses to save a web clip
+profile whose URL contains an ampersand in any encoding (it answers `409 Unable to update the
+database`). JAWA accepts either separator on `/selfserve/`, so a hand-built profile may use `;` too.
 
 `token`, `id`, and `udid` are reserved and required. `token` is the automation's per-service
 token; `id` and `udid` are Jamf Pro payload variables (`$JSSID`, `$UDID`), substituted per device
@@ -233,7 +237,8 @@ the web clip URL so you can build the profile by hand.
 **Bundled templates**
 
 - **Return to Service (Self-Serve).** Lets the person holding a shared iPad or iPhone erase it
-  and re-enroll it themselves, with no IT touch.
+  and re-enroll it themselves, with no IT touch. The Wi-Fi the device rejoins comes from an
+  existing Wi-Fi configuration profile in Jamf Pro, named when you enable the template.
 - **Brander (Self-Serve).** Lets the person holding an iPad or iPhone apply a branded wallpaper
   showing the device's name, serial, location, and a QR code of its Jamf Pro id; it needs Pillow
   and qrcode, which the installer installs from `requirements.txt`.

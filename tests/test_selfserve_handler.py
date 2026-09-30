@@ -48,6 +48,17 @@ def test_service_url_carries_token_and_reserved_variables():
     assert "DEVICENAME=$DEVICENAME" in url
 
 
+def test_service_url_never_contains_an_ampersand():
+    """Jamf Pro refuses to store a web clip profile whose URL contains
+    '&' in any encoding (409 "Unable to update the database", probed
+    live 2026-09-21), so parameters are joined with ';'. Reserved
+    params come first so a display value cannot disturb them."""
+    url = ssh.service_url("https://jawa.example.test", "reset-ipad", "T")
+    assert "&" not in url
+    query = url.split("?", 1)[1]
+    assert query.split(";")[:3] == ["token=T", "id=$JSSID", "udid=$UDID"]
+
+
 def test_mint_token_is_long_and_unique():
     a, b = ssh.mint_token(), ssh.mint_token()
     assert a != b
@@ -187,8 +198,8 @@ class _ProfileJamf:
             return self._fake_response_cls(
                 {},
                 status_code=self.status,
-                text="<mobile_device_configuration_profile><id>55</id>"
-                "</mobile_device_configuration_profile>",
+                text="<configuration_profile><id>55</id>"
+                "</configuration_profile>",
             )
         return self._fake_post(url, **kwargs)
 
@@ -225,10 +236,69 @@ def test_plist_is_a_managed_web_clip_with_the_service_url():
     )
 
 
+def test_plist_uuids_are_random_when_the_record_stores_none():
+    """Deterministic uuid5 UUIDs collided with a retired profile's when
+    a service was deleted and re-created under the same name: Jamf
+    keeps the retired profile (renamed, unscoped) and answered 409
+    "Duplicate payload uuid" (live, 2026-09-21)."""
+    entry = {"name": "reset-ipad", "page_title": "Reset"}
+    a = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    b = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    assert a["PayloadUUID"] != b["PayloadUUID"]
+    assert (
+        a["PayloadContent"][0]["PayloadUUID"]
+        != b["PayloadContent"][0]["PayloadUUID"]
+    )
+
+
+def test_plist_uuids_come_from_the_record_when_stored():
+    entry = {
+        "name": "reset-ipad",
+        "page_title": "Reset",
+        "profile_uuid": "11111111-2222-4333-8444-555555555555",
+        "clip_uuid": "66666666-7777-4888-8999-AAAAAAAAAAAA",
+    }
+    plist = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    assert plist["PayloadUUID"] == entry["profile_uuid"]
+    assert plist["PayloadContent"][0]["PayloadUUID"] == entry["clip_uuid"]
+
+
+def test_create_stores_the_profile_uuids_on_the_record(
+    logged_in_client, jawa_env, profile_jamf
+):
+    import uuid as uuid_mod
+
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    uuid_mod.UUID(entry["profile_uuid"])
+    uuid_mod.UUID(entry["clip_uuid"])
+    _, kwargs = profile_jamf.posts[0]
+    assert entry["profile_uuid"] in kwargs["data"]
+    assert entry["clip_uuid"] in kwargs["data"]
+
+
+def test_profile_xml_uses_only_mobile_schema_elements():
+    """Jamf Pro's mobiledeviceconfigurationprofiles schema has
+    deployment_method; distribution_method belongs to the macOS
+    (osxconfigurationprofiles) schema. Sending it makes Jamf answer
+    400 "Error in XML file. Possible mismatch between resource
+    specified in the URL and XML file" (seen live 2026-09-21)."""
+    entry = {"name": "reset-ipad", "page_title": "Reset"}
+    root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/"))
+    assert root.find("general/distribution_method") is None
+    assert root.findtext("general/deployment_method") == (
+        "Install Automatically"
+    )
+
+
 def test_profile_xml_is_well_formed_and_unscoped():
     entry = {"name": "reset-ipad", "page_title": "Reset"}
     root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/?a=1&b=2"))
-    assert root.tag == "mobile_device_configuration_profile"
+    assert root.tag == "configuration_profile"
     assert (
         root.findtext("general/name")
         == "JAWA Self-Serve: Reset (reset-ipad)"

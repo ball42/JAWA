@@ -82,6 +82,55 @@ def test_brander_accepts_a_matching_udid_case_insensitively(
     assert device == {"general": {"udid": "REAL-UDID"}}
 
 
+def test_rts_fetches_the_named_wifi_profile_from_jamf(rts_module):
+    """Return to Service reuses a Wi-Fi configuration profile that
+    already exists in Jamf Pro (looked up by name), so the payload the
+    device receives is one Jamf built -- nothing is typed by hand."""
+    seen = {}
+
+    def fake_api(endpoint, method="GET", data=None, api="classic"):
+        seen["endpoint"] = endpoint
+        return {"configuration_profile": {"general": {"payloads": (
+            '<?xml version="1.0" encoding="UTF-8"?><plist version="1">'
+            "<dict><key>PayloadContent</key><array><dict>"
+            "<key>PayloadType</key><string>com.apple.wifi.managed</string>"
+            "</dict></array></dict></plist>"
+        )}}}
+
+    rts_module.perform_api_call = fake_api
+    plist = rts_module.fetch_wifi_profile_plist("Managed WiFi - MCP")
+    assert seen["endpoint"] == (
+        "mobiledeviceconfigurationprofiles/name/Managed%20WiFi%20-%20MCP"
+    )
+    assert b"com.apple.wifi.managed" in plist
+
+
+def test_rts_refuses_a_profile_that_is_not_wifi(rts_module):
+    rts_module.perform_api_call = lambda *a, **k: {
+        "configuration_profile": {"general": {"payloads": (
+            "<plist><dict><key>PayloadType</key>"
+            "<string>com.apple.webClip.managed</string></dict></plist>"
+        )}}
+    }
+    with pytest.raises(SystemExit) as excinfo:
+        rts_module.fetch_wifi_profile_plist("Web Clip")
+    assert excinfo.value.code == 25
+
+
+def test_rts_exits_when_the_wifi_profile_is_missing(rts_module):
+    import requests
+
+    def not_found(*a, **k):
+        resp = requests.Response()
+        resp.status_code = 404
+        raise requests.HTTPError(response=resp)
+
+    rts_module.perform_api_call = not_found
+    with pytest.raises(SystemExit) as excinfo:
+        rts_module.fetch_wifi_profile_plist("Nope")
+    assert excinfo.value.code == 24
+
+
 # --- find_role must never leave the Brander assets directory ------------------
 # The role comes from a Jamf extension attribute that the device side can set
 # (Jamf Setup), so it is untrusted: "../x" or an absolute path used to select
