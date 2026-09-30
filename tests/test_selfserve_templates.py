@@ -179,6 +179,7 @@ def test_brander_script_generates_an_image_without_a_font_file(tmp_path):
         source.replace('"__JAWA_EA_ID__"', "0")
         .replace("__JAWA_EA_ID__", "0")
         .replace("__JAWA_WALLPAPER_SETTING__", "3")
+        .replace("__JAWA_MAX_KB__", "1500")
         # font_path is a required field at enable time, so the deployed
         # script never carries the bare token; "none" is the sentinel
         # value load_font() treats as the built-in font.
@@ -203,11 +204,7 @@ def test_brander_script_generates_an_image_without_a_font_file(tmp_path):
             "username": "nurse",
         },
     }
-    out = module.make_image(
-        ASSETS, "lockscreen-template", "Nursing", device, "", str(tmp_path)
+    img = module.compose_legacy(
+        ASSETS, "lockscreen-template", "Nursing", device
     )
-    assert os.path.isfile(out)
-    from PIL import Image
-
-    with Image.open(out) as img:
-        assert img.size[0] > 100
+    assert img.size[0] > 100

@@ -10,14 +10,25 @@ match Jamf Pro's record before anything is sent (ADR-0012).
 Originally written for webhook events by Chris Ball (2021), with
 updates by David Raabe and Tim Knox.
 
+With a template configured, the wallpaper is rendered by wallrender
+(EWOK's renderer, vendored and hash-pinned in data/workflows/lib) from
+an allowlist of the verified record's fields. With none, or "legacy",
+the original layout is drawn exactly as before.
+
 Exit codes: 0 set; 12 bad payload; 20 UDID mismatch; 21 device not
-found; 24 wallpaper command refused; 42 Brander EA is Off.
+found; 24 wallpaper command refused; 30 template missing or invalid;
+31 renderer missing, edited or on an unsupported Pillow; 32 template
+failed to render; 33 render timed out; 34 wallpaper over the size
+budget; 42 Brander EA is Off.
 """
 
 import base64
+import hashlib
+import io
 import json
 import os
 import re
+import signal
 import sys
 import time
 
@@ -106,6 +117,11 @@ EA_ID = __JAWA_EA_ID__  # noqa: F821 -- Jamf Setup role EA id; 0 = unused
 WALLPAPER_SETTING = __JAWA_WALLPAPER_SETTING__  # noqa: F821 -- 1/2/3
 ASSETS_DIR = "__JAWA_ASSETS_DIR__"
 FONT_PATH = "__JAWA_FONT_PATH__"  # "none" or blank = Pillow's built-in font
+TEMPLATE_PATH = "__JAWA_TEMPLATE_PATH__"  # "legacy" = the original layout
+MAX_KB = __JAWA_MAX_KB__  # noqa: F821 -- largest image sent, in KB
+
+RENDER_TIMEOUT = 20  # seconds; templates are untrusted input
+MAX_TEMPLATE_BYTES = 256 * 1024
 
 
 def load_font(size):
@@ -178,8 +194,8 @@ def _centered(draw, font, text, img_w, y, color):
     draw.text(((img_w - (right - left)) / 2, y), text, color, font=font)
 
 
-def make_image(assets_dir, basename, role, device, ea_note, out_dir):
-    """Compose the wallpaper and return the PNG path."""
+def compose_legacy(assets_dir, basename, role, device):
+    """Draw the original Brander layout and return the image."""
     general = device.get("general", {})
     location = device.get("location", {})
     role_line = role.title() if role else "Please open the Setup app"
@@ -222,14 +238,171 @@ def make_image(assets_dir, basename, role, device, ea_note, out_dir):
         qr_img,
         ((img_w - qr_img.size[0]) // 2, (img_h - qr_img.size[1]) // 2),
     )
-    out = os.path.join(out_dir, f"brander-{int(time.time() * 1000)}.png")
-    img.save(out)
-    return out
+    return img
 
 
-def set_wallpaper(image_path, jss_id):
-    with open(image_path, "rb") as handle:
-        b64 = base64.b64encode(handle.read()).decode("ascii")
+# --- wallrender templates ---
+
+
+class RenderTimeout(BaseException):
+    """BaseException, so no broad except inside the renderer eats it."""
+
+
+def run_with_timeout(func, seconds):
+    """Call func(); raise RenderTimeout if it runs past `seconds`."""
+    if not hasattr(signal, "setitimer"):
+        return func()
+
+    def _expired(signum, frame):
+        raise RenderTimeout()
+
+    previous = signal.signal(signal.SIGALRM, _expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        return func()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _lib_dirs():
+    """Where the vendored renderer lives, relative to this script: the
+    template copy in data/workflows/scripts, or a deployed copy in
+    <JAWA>/scripts."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    parent = os.path.dirname(here)
+    return [
+        os.path.join(parent, "lib"),
+        os.path.join(parent, "data", "workflows", "lib"),
+    ]
+
+
+def _version_tuple(text):
+    return tuple(int(p) for p in re.findall(r"\d+", text)[:2])
+
+
+def load_renderer():
+    """Import the vendored wallrender after checking it is the pinned,
+    unedited copy and that this Pillow is one it is pinned against."""
+    import PIL
+
+    for lib in _lib_dirs():
+        lock_path = os.path.join(lib, "wallrender.lock.json")
+        if os.path.isfile(lock_path):
+            break
+    else:
+        print("wallrender is not installed next to this script.")
+        sys.exit(31)
+    with open(lock_path, encoding="utf-8") as handle:
+        lock = json.load(handle)
+    for rel, expected in lock["files"].items():
+        with open(os.path.join(lib, "wallrender", rel), "rb") as handle:
+            if hashlib.sha256(handle.read()).hexdigest() != expected:
+                print(f"wallrender/{rel} differs from the pinned copy.")
+                sys.exit(31)
+    pillow = _version_tuple(PIL.__version__)
+    low, high = tuple(lock["pillow_min"]), tuple(lock["pillow_below"])
+    if not low <= pillow < high:
+        print(f"Pillow {PIL.__version__} is not supported by wallrender.")
+        sys.exit(31)
+    lib = os.path.realpath(lib)
+    if lib not in sys.path:
+        sys.path.insert(0, lib)
+    import wallrender
+
+    return wallrender
+
+
+def load_template(path):
+    """The template JSON: absolute, or relative to the assets dir."""
+    if not os.path.isabs(path):
+        path = os.path.join(ASSETS_DIR, path)
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read(MAX_TEMPLATE_BYTES + 1)
+    except OSError as err:
+        print(f"Template {path} could not be read: {err.strerror}.")
+        sys.exit(30)
+    if len(raw) > MAX_TEMPLATE_BYTES:
+        print(f"Template {path} is over {MAX_TEMPLATE_BYTES} bytes.")
+        sys.exit(30)
+    try:
+        template = json.loads(raw)
+    except ValueError as err:
+        print(f"Template {path} is not valid JSON: {err}.")
+        sys.exit(30)
+    return template
+
+
+def build_values(device):
+    """The only device data a template can print: fields of the
+    UDID-verified record, never anything from the request."""
+    general = device.get("general", {})
+    location = device.get("location", {})
+    return {
+        "device_name": general.get("device_name", ""),
+        "serial_number": general.get("serial_number", ""),
+        "asset_tag": general.get("asset_tag", ""),
+        "jss_id": general.get("id", ""),
+        "location": {"building": location.get("building", "")},
+    }
+
+
+def read_asset(asset_id):
+    """PNG or JPEG bytes for a template asset id, from ASSETS_DIR only."""
+    if ROLE_NAME.match(asset_id):
+        assets = os.path.realpath(ASSETS_DIR)
+        for ext in ("png", "jpg", "jpeg"):
+            path = os.path.realpath(
+                os.path.join(assets, f"{asset_id}.{ext}")
+            )
+            if path.startswith(assets + os.sep) and os.path.isfile(path):
+                with open(path, "rb") as handle:
+                    return handle.read()
+    raise KeyError(asset_id)
+
+
+def render_template(renderer, template, values):
+    return renderer.render(template, values, read_asset)
+
+
+def compose_template(path, device):
+    renderer = load_renderer()
+    template = load_template(path)
+    problems = renderer.validate(template)
+    if problems:
+        print("Template is invalid: " + "; ".join(problems[:5]))
+        sys.exit(30)
+    try:
+        return run_with_timeout(
+            lambda: render_template(renderer, template, build_values(device)),
+            RENDER_TIMEOUT,
+        )
+    except renderer.TemplateError as err:
+        print(f"Template failed to render: {err}")
+        sys.exit(32)
+    except RenderTimeout:
+        print(f"Template took over {RENDER_TIMEOUT}s to render.")
+        sys.exit(33)
+
+
+def encode_within_budget(img, max_bytes):
+    """PNG if it fits, else the best JPEG that does; exit 34 if none."""
+    img = img.convert("RGB")
+    attempts = [("PNG", {"optimize": True})] + [
+        ("JPEG", {"quality": q}) for q in (90, 80, 70, 60)
+    ]
+    for fmt, options in attempts:
+        buffer = io.BytesIO()
+        img.save(buffer, fmt, **options)
+        if buffer.tell() <= max_bytes:
+            return buffer.getvalue()
+    print(f"Wallpaper is over the {max_bytes // 1024} KB budget.")
+    sys.exit(34)
+
+
+def set_wallpaper(image_bytes, jss_id):
+    b64 = base64.b64encode(image_bytes).decode("ascii")
     body = (
         "<mobile_device_command><command>Wallpaper</command>"
         f"<wallpaper_setting>{WALLPAPER_SETTING}</wallpaper_setting>"
@@ -264,13 +437,15 @@ def main():
 
     device = fetch_verified_device(jss_id, udid)
     basename, role = find_role(device)
-    image = make_image(ASSETS_DIR, basename, role, device, "", "/tmp")
-    try:
-        set_wallpaper(image, jss_id)
-    finally:
-        if os.path.exists(image):
-            os.remove(image)
-    print(f"Device {jss_id}: wallpaper set ({basename}.png).")
+    template = TEMPLATE_PATH.strip()
+    if template and template.lower() != "legacy":
+        img = compose_template(template, device)
+        source = os.path.basename(template)
+    else:
+        img = compose_legacy(ASSETS_DIR, basename, role, device)
+        source = f"{basename}.png"
+    set_wallpaper(encode_within_budget(img, MAX_KB * 1024), jss_id)
+    print(f"Device {jss_id}: wallpaper set ({source}).")
 
 
 if __name__ == "__main__":

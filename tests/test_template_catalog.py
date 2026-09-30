@@ -418,6 +418,46 @@ def test_unfilled_param_fails_loud():
     assert "SQLite Database Path" in excinfo.value.message
 
 
+
+def test_blank_param_with_a_default_uses_the_default():
+    """Optional settings (Brander's template_path and max_kb) declare a
+    default, so an admin who leaves them blank gets the documented
+    behaviour instead of a Missing Configuration error."""
+    from views import template_view
+
+    workflow = {
+        "config_params": [
+            {
+                "key": "template_path",
+                "token": '"__JAWA_TEMPLATE_PATH__"',
+                "type": "text",
+                "default": "legacy",
+            },
+            {
+                "key": "max_kb",
+                "token": "__JAWA_MAX_KB__",
+                "type": "number",
+                "default": "1500",
+            },
+        ]
+    }
+    out = template_view.substitute_params(
+        'T = "__JAWA_TEMPLATE_PATH__"\nK = __JAWA_MAX_KB__\n',
+        workflow,
+        {"template_path": "", "max_kb": "  "},
+        [],
+        "",
+    )
+    assert out == "T = 'legacy'\nK = 1500\n"
+
+
+def test_enable_form_prefills_param_defaults(logged_in_client, jawa_env):
+    response = logged_in_client.get("/templates/self-serve-brander/enable")
+    html = response.get_data(as_text=True)
+    assert 'id="param-template_path"' in html
+    assert 'value="legacy"' in html
+    assert 'value="1500"' in html
+
 def test_credential_set_fills_the_standard_three():
     from views import template_view
 
@@ -1139,9 +1179,16 @@ def test_deployed_script_interpreter_can_import_its_dependencies(
     assert shebang.startswith("#!"), f"{slug} lost its shebang"
     interpreter = shebang[2:].strip().split()
 
+    # Vendored packages (wallrender) are put on sys.path by the script
+    # itself, from <JAWA>/data/workflows/lib; import them the same way so
+    # their own dependencies are still checked against this interpreter.
+    lib = os.path.join(REPO_ROOT, "data", "workflows", "lib")
     for module in sorted(needed):
+        code = f"import {module}"
+        if os.path.isdir(os.path.join(lib, module)):
+            code = f"import sys; sys.path.insert(0, {lib!r}); {code}"
         proc = subprocess.run(
-            interpreter + ["-c", f"import {module}"],
+            interpreter + ["-c", code],
             capture_output=True,
         )
         assert proc.returncode == 0, (
