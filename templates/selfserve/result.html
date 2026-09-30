@@ -18,6 +18,8 @@
     .selfserve-card p { font-size: 1.05rem; }
     .selfserve-ok { color: var(--color-success, #2e7d32); }
     .selfserve-failed { color: var(--color-danger, #d63447); }
+    .selfserve-actions { margin-top: 2rem; }
+    .selfserve-actions .btn { min-width: 12rem; font-size: 1.05rem; }
 </style>
 {% endblock %}
 
@@ -30,6 +32,20 @@
         {% else %}
         <p class="selfserve-failed">{{ strings.failure_message }}</p>
         {% endif %}
+        {# A full-screen web clip has no reload or back button of its own,
+           so offer the way back to the start page. #}
+        <form method="GET" action="/selfserve/{{ service_name }}"
+              class="selfserve-actions">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="id" value="{{ jss_id }}">
+            <input type="hidden" name="udid" value="{{ udid }}">
+            {% for key, value in params.items() %}
+            <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endfor %}
+            <button type="submit" class="btn btn-outline-secondary">
+                Back to start
+            </button>
+        </form>
     </div>
 </div>
 {% endblock %}

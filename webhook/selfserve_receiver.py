@@ -239,6 +239,13 @@ def service_run(service_name: str):
         service, jss_id, udid, params, _remote_address()
     )
     strings = _page_strings(service, params)
+    back = {
+        "service_name": service["name"],
+        "token": request.form.get("token", ""),
+        "jss_id": jss_id,
+        "udid": udid,
+        "params": params,
+    }
     logthis.info(
         f"Self-serve {service['name']} confirmed for device {jss_id} "
         f"from {payload['event']['remoteAddress']}; running script..."
@@ -255,9 +262,10 @@ def service_run(service_name: str):
                 "selfserve/result.html",
                 strings=strings,
                 succeeded=False,
+                **back,
             ),
             500,
         )
     return render_template(
-        "selfserve/result.html", strings=strings, succeeded=True
+        "selfserve/result.html", strings=strings, succeeded=True, **back
     )
