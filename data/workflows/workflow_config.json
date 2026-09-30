@@ -409,6 +409,22 @@
                 "placeholder": "none",
                 "token": "\"__JAWA_FONT_PATH__\"",
                 "type": "text"
+            },
+            {
+                "key": "template_path",
+                "label": "Wallpaper template (JSON file, absolute or in the assets directory; legacy for the original layout)",
+                "placeholder": "legacy",
+                "default": "legacy",
+                "token": "\"__JAWA_TEMPLATE_PATH__\"",
+                "type": "text"
+            },
+            {
+                "key": "max_kb",
+                "label": "Largest wallpaper to send, in KB (larger images are sent as JPEG)",
+                "placeholder": "1500",
+                "default": "1500",
+                "token": "__JAWA_MAX_KB__",
+                "type": "number"
             }
         ],
         "exit_codes": [
@@ -417,6 +433,11 @@
             {"code": 20, "meaning": "UDID did not match the device record (refused)"},
             {"code": 21, "meaning": "Device id not found in Jamf Pro"},
             {"code": 24, "meaning": "Wallpaper command refused by Jamf Pro"},
+            {"code": 30, "meaning": "Wallpaper template missing, unreadable or invalid"},
+            {"code": 31, "meaning": "Template renderer missing, edited, or on an unsupported Pillow"},
+            {"code": 32, "meaning": "Wallpaper template failed to render"},
+            {"code": 33, "meaning": "Wallpaper template took too long to render"},
+            {"code": 34, "meaning": "Wallpaper is over the size budget even as JPEG"},
             {"code": 42, "meaning": "The device's Brander extension attribute is Off"}
         ],
         "tags": ["self-serve", "web-clip", "mobile", "wallpaper", "branding"],

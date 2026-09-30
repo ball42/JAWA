@@ -22,14 +22,16 @@ def _load_module(basename):
     same technique as test_brander_script_generates_an_image_without_
     a_font_file in tests/test_selfserve_templates.py. The bare numeric
     template tokens must become literals for the module to exec at
-    all; __JAWA_WALLPAPER_SETTING__ and __JAWA_EA_ID__ are only
-    present in Brander, so the replace is a no-op for RTS.
+    all; __JAWA_WALLPAPER_SETTING__, __JAWA_EA_ID__ and __JAWA_MAX_KB__
+    are only present in Brander, so the replace is a no-op for RTS.
     """
     path = os.path.join(SCRIPTS_DIR, basename)
     with open(path, encoding="utf-8") as handle:
         source = handle.read()
-    source = source.replace("__JAWA_EA_ID__", "0").replace(
-        "__JAWA_WALLPAPER_SETTING__", "3"
+    source = (
+        source.replace("__JAWA_EA_ID__", "0")
+        .replace("__JAWA_WALLPAPER_SETTING__", "3")
+        .replace("__JAWA_MAX_KB__", "1500")
     )
     spec = importlib.util.spec_from_loader(basename, loader=None)
     module = importlib.util.module_from_spec(spec)
@@ -127,3 +129,52 @@ def test_rts_exits_when_the_wifi_profile_is_missing(rts_module):
     with pytest.raises(SystemExit) as excinfo:
         rts_module.fetch_wifi_profile_plist("Nope")
     assert excinfo.value.code == 24
+
+
+# --- find_role must never leave the Brander assets directory ------------------
+# The role comes from a Jamf extension attribute that the device side can set
+# (Jamf Setup), so it is untrusted: "../x" or an absolute path used to select
+# any .png on the JAWA host as the wallpaper background.
+
+@pytest.fixture()
+def role_assets(tmp_path, brander_module):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    for name in ("lockscreen-template", "null", "videoconferencing", "nursing"):
+        (assets / f"{name}.png").write_bytes(b"png")
+    (tmp_path / "secret.png").write_bytes(b"outside the assets dir")
+    brander_module.ASSETS_DIR = str(assets)
+    brander_module.EA_ID = 7
+    return brander_module, tmp_path
+
+
+def _device(role):
+    return {"extension_attributes": [{"id": 7, "name": "Setup Role", "value": role}]}
+
+
+@pytest.mark.parametrize("role", [
+    "../secret", "..", "../../secret", "..%2fsecret", "/tmp/secret", "nursing/../../secret",
+    "x" * 65, "Nürsing",
+])
+def test_brander_role_cannot_escape_the_assets_directory(role_assets, role):
+    module, _ = role_assets
+    basename, _label = module.find_role(_device(role))
+    assert basename == "lockscreen-template"
+
+
+def test_brander_role_symlink_out_of_assets_is_refused(role_assets):
+    module, tmp_path = role_assets
+    os.symlink(tmp_path / "secret.png", os.path.join(module.ASSETS_DIR, "evil.png"))
+    basename, _label = module.find_role(_device("evil"))
+    assert basename == "lockscreen-template"
+
+
+@pytest.mark.parametrize("role,expected", [
+    ("Video Conferencing", "videoconferencing"),
+    ("NURSING", "nursing"),
+    ("Pharmacist", "lockscreen-template"),  # no image shipped for it
+    ("", "null"),
+])
+def test_brander_real_roles_still_match(role_assets, role, expected):
+    module, _ = role_assets
+    assert module.find_role(_device(role))[0] == expected

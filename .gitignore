@@ -28,6 +28,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!data/workflows/lib/
 lib64/
 parts/
 sdist/
