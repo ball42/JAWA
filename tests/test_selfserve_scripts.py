@@ -22,14 +22,16 @@ def _load_module(basename):
     same technique as test_brander_script_generates_an_image_without_
     a_font_file in tests/test_selfserve_templates.py. The bare numeric
     template tokens must become literals for the module to exec at
-    all; __JAWA_WALLPAPER_SETTING__ and __JAWA_EA_ID__ are only
-    present in Brander, so the replace is a no-op for RTS.
+    all; __JAWA_WALLPAPER_SETTING__, __JAWA_EA_ID__ and __JAWA_MAX_KB__
+    are only present in Brander, so the replace is a no-op for RTS.
     """
     path = os.path.join(SCRIPTS_DIR, basename)
     with open(path, encoding="utf-8") as handle:
         source = handle.read()
-    source = source.replace("__JAWA_EA_ID__", "0").replace(
-        "__JAWA_WALLPAPER_SETTING__", "3"
+    source = (
+        source.replace("__JAWA_EA_ID__", "0")
+        .replace("__JAWA_WALLPAPER_SETTING__", "3")
+        .replace("__JAWA_MAX_KB__", "1500")
     )
     spec = importlib.util.spec_from_loader(basename, loader=None)
     module = importlib.util.module_from_spec(spec)

@@ -96,6 +96,7 @@
                    mirrors that server-side rule. #}
                 <input type="{{ param.type or 'text' }}" name="{{ param.key }}" id="param-{{ param.key }}"
                        class="form-control" placeholder="{{ param.placeholder }}"
+                       {% if param.default is defined %}value="{{ param.default }}"{% endif %}
                        {% if param.key not in (credential_keys or []) %}required{% endif %}>
             </div>
             {% endfor %}
