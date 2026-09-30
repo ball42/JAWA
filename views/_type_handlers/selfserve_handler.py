@@ -31,6 +31,8 @@ the managed device. See README.md, "Self-serve automations", and the
 device-facing receiver in webhook/selfserve_receiver.py.
 """
 
+import functools
+import os
 import plistlib
 import re
 import secrets
@@ -143,6 +145,19 @@ def _payload_uuids(entry: Dict[str, Any]) -> Tuple[str, str]:
     )
 
 
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+WEBCLIP_ICON = os.path.join(_REPO_ROOT, "static", "img", "webclip-icon.png")
+
+
+@functools.lru_cache(maxsize=1)
+def _webclip_icon() -> bytes:
+    """The home-screen icon: the JAWA logo, 180x180 and precomposed."""
+    with open(WEBCLIP_ICON, "rb") as handle:
+        return handle.read()
+
+
 def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
     name = entry["name"]
     profile_uuid, clip_uuid = _payload_uuids(entry)
@@ -151,6 +166,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
         "PayloadContent": [
             {
                 "FullScreen": True,
+                "Icon": _webclip_icon(),
                 "IsRemovable": False,
                 "Label": _label(entry),
                 "PayloadDescription": (
