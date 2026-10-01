@@ -317,10 +317,10 @@ def load_renderer():
     return wallrender
 
 
-def load_template(path):
-    """The template JSON: absolute, or relative to the assets dir."""
+def load_template(path, base=None):
+    """JSON from path: absolute, or relative to base (the assets dir)."""
     if not os.path.isabs(path):
-        path = os.path.join(ASSETS_DIR, path)
+        path = os.path.join(base or ASSETS_DIR, path)
     try:
         with open(path, "rb") as handle:
             raw = handle.read(MAX_TEMPLATE_BYTES + 1)
@@ -336,6 +336,52 @@ def load_template(path):
         print(f"Template {path} is not valid JSON: {err}.")
         sys.exit(30)
     return template
+
+
+def device_family(model_identifier):
+    """'iPad8,5' -> 'ipad', 'iPhone15,3' -> 'iphone'."""
+    match = re.match(r"[A-Za-z]+", model_identifier or "")
+    return match.group(0).lower() if match else ""
+
+
+def _is_template_set(data):
+    return isinstance(data, dict) and "templates" in data and (
+        "schema_version" not in data
+    )
+
+
+def resolve_template(path, device):
+    """The template for this device, and the file it came from.
+
+    path names a template, or a template set: {"templates": {key: file}}
+    where key is an exact model identifier ("iPad8,5"), a family
+    ("ipad", "iphone") or "default", tried in that order against the
+    verified record. Set entries are relative to the set file.
+    """
+    data = load_template(path)
+    if not _is_template_set(data):
+        return data, os.path.basename(path)
+    templates = data["templates"]
+    if not isinstance(templates, dict) or not all(
+        isinstance(v, str) for v in templates.values()
+    ):
+        print("Template set must map names to template files.")
+        sys.exit(30)
+    model = str(device.get("general", {}).get("model_identifier") or "")
+    for key in (model, device_family(model), "default"):
+        if key and key in templates:
+            chosen = templates[key]
+            break
+    else:
+        print(f"Template set has no entry for {model or 'this device'} "
+              "and no default.")
+        sys.exit(30)
+    full = path if os.path.isabs(path) else os.path.join(ASSETS_DIR, path)
+    template = load_template(chosen, base=os.path.dirname(full))
+    if _is_template_set(template):
+        print(f"Template set entry {chosen} is itself a set.")
+        sys.exit(30)
+    return template, os.path.basename(chosen)
 
 
 def build_values(device):
@@ -371,25 +417,28 @@ def render_template(renderer, template, values):
 
 
 def template_wallpaper(path, device, max_bytes):
-    """Render the template and encode it, both inside RENDER_TIMEOUT.
+    """Render the device's template and encode it, inside RENDER_TIMEOUT.
+
+    Returns (image bytes, name of the template file used).
 
     The timeout is checked between Python bytecodes, so a single Pillow
     call finishes before it fires; wallrender's canvas caps bound how
     long any one call can take."""
     renderer = load_renderer()
-    template = load_template(path)
+    template, source = resolve_template(path, device)
     problems = renderer.validate(template)
     if problems:
         print("Template is invalid: " + "; ".join(problems[:5]))
         sys.exit(30)
     try:
-        return run_with_timeout(
+        image = run_with_timeout(
             lambda: encode_within_budget(
                 render_template(renderer, template, build_values(device)),
                 max_bytes,
             ),
             RENDER_TIMEOUT,
         )
+        return image, source
     except renderer.TemplateError as err:
         print(f"Template failed to render: {err}")
         sys.exit(32)
@@ -451,8 +500,7 @@ def main():
     basename, role = find_role(device)
     template = TEMPLATE_PATH.strip()
     if template and template.lower() != "legacy":
-        image = template_wallpaper(template, device, MAX_KB * 1024)
-        source = os.path.basename(template)
+        image, source = template_wallpaper(template, device, MAX_KB * 1024)
     else:
         img = compose_legacy(ASSETS_DIR, basename, role, device)
         image = encode_within_budget(img, MAX_KB * 1024)
