@@ -346,6 +346,23 @@ def test_unusable_set_exits_30(jamf, tmp_path, templates):
     assert jamf.commands == []
 
 
+def test_empty_asset_tag_hides_its_line_in_the_shipped_template(jamf, tmp_path):
+    """The example labels the asset tag ("Asset HR-0042"); with no tag on
+    the record the whole line is skipped, not printed as a bare label."""
+    with open(os.path.join(ASSETS, "example-ipad-template.json")) as handle:
+        template = json.load(handle)
+    without = dict(template, layers=[
+        layer for layer in template["layers"]
+        if layer.get("text") != "Asset {{asset_tag}}"
+    ])
+    jamf.device["general"]["asset_tag"] = ""
+    run(load_brander(template_path="example-ipad-template.json"))
+    shipped = jamf.sent_image()
+    jamf.commands.clear()
+    run(load_brander(template_path=write_template(tmp_path, without)))
+    assert jamf.sent_image() == shipped
+
+
 def test_relative_template_path_resolves_in_the_assets_dir(jamf, tmp_path):
     assets = tmp_path / "assets"
     shutil.copytree(ASSETS, assets)
