@@ -154,6 +154,7 @@ def test_brander_template_and_assets_ship():
         "jawa-logo.png",
         "example-template.json",
         "example-ipad-template.json",
+        "example-set.json",
         "README.md",
     ):
         assert os.path.isfile(os.path.join(ASSETS, name)), name

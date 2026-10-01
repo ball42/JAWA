@@ -272,6 +272,80 @@ def test_shipped_example_templates_render_with_the_logo(
         assert img.convert("RGB").getpixel(logo_point) != (0x0B, 0x25, 0x45)
 
 
+# --- template sets: pick the template from the device model --------------
+
+
+@pytest.mark.parametrize(
+    "model, size",
+    [
+        ("iPhone15,3", (1290, 2796)),
+        ("iPad8,5", (2732, 2732)),
+        ("AppleTV11,1", (2732, 2732)),  # default
+        ("", (2732, 2732)),  # no model on the record: default
+    ],
+)
+def test_shipped_example_set_picks_by_device_family(jamf, model, size):
+    jamf.device["general"]["model_identifier"] = model
+    module = load_brander(template_path="example-set.json")
+    assert run(module) == 0
+    with Image.open(io.BytesIO(jamf.sent_image())) as img:
+        assert img.size == size
+
+
+def write_set(tmp_path, templates, sizes):
+    for name, (w, h) in sizes.items():
+        (tmp_path / name).write_text(
+            json.dumps(basic_template(canvas={"width": w, "height": h})),
+            encoding="utf-8",
+        )
+    path = tmp_path / "set.json"
+    path.write_text(json.dumps({"templates": templates}), encoding="utf-8")
+    return str(path)
+
+
+def test_exact_model_beats_family(jamf, tmp_path):
+    path = write_set(
+        tmp_path,
+        {"iPad8,5": "big.json", "ipad": "small.json"},
+        {"big.json": (400, 400), "small.json": (200, 200)},
+    )
+    jamf.device["general"]["model_identifier"] = "iPad8,5"
+    assert run(load_brander(template_path=path)) == 0
+    with Image.open(io.BytesIO(jamf.sent_image())) as img:
+        assert img.size == (400, 400)
+
+
+def test_set_entries_resolve_next_to_the_set_file(jamf, tmp_path):
+    path = write_set(tmp_path, {"default": "only.json"}, {"only.json": (120, 240)})
+    assert run(load_brander(template_path=path)) == 0
+    with Image.open(io.BytesIO(jamf.sent_image())) as img:
+        assert img.size == (120, 240)
+
+
+def test_set_logs_the_template_it_chose(jamf, tmp_path, capsys):
+    path = write_set(tmp_path, {"iphone": "phone.json"}, {"phone.json": (100, 200)})
+    jamf.device["general"]["model_identifier"] = "iPhone14,2"
+    run(load_brander(template_path=path))
+    assert "wallpaper set (phone.json)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "templates",
+    [
+        {"ipad": "small.json"},  # no match and no default
+        {"default": "missing.json"},
+        {"default": "set.json"},  # a set may not name a set
+        [],
+        {"default": 7},
+    ],
+)
+def test_unusable_set_exits_30(jamf, tmp_path, templates):
+    path = write_set(tmp_path, templates, {"small.json": (200, 200)})
+    jamf.device["general"]["model_identifier"] = "iPhone15,3"
+    assert run(load_brander(template_path=path)) == 30
+    assert jamf.commands == []
+
+
 def test_relative_template_path_resolves_in_the_assets_dir(jamf, tmp_path):
     assets = tmp_path / "assets"
     shutil.copytree(ASSETS, assets)
