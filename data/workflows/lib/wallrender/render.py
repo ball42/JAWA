@@ -16,9 +16,9 @@ from typing import Any, Callable, Union
 
 import qrcode
 import qrcode.exceptions
-from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat, UnidentifiedImageError
 
-from .schema import MAX_PIXELS, MAX_QR, MAX_SIDE, TemplateError, validate
+from .schema import MAX_PIXELS, MAX_QR, MAX_SIDE, MAX_TEXT, TemplateError, validate
 from .variables import substitute
 
 logger = logging.getLogger("wallrender")
@@ -127,43 +127,109 @@ def _canvas(template: dict[str, Any], session: _Session) -> Image.Image:
     return Image.new("RGBA", (canvas["width"], canvas["height"]), _rgba(background["color"], (0, 0, 0, 255)))
 
 
-def _fit_font(session: _Session, text: str, px: int, bw: int, bh: int):
-    """Largest size <= px whose text fits the box: one measurement plus a few
-    checks, never a pixel-by-pixel walk down from a huge size."""
+def _fit_font(session: _Session, text: str, px: int, bw: int, bh: int, floor: int = MIN_FONT_PX):
+    """Largest size in [floor, px] whose text fits the box: one measurement plus
+    a few checks, never a pixel-by-pixel walk down from a huge size."""
     probe = ImageDraw.Draw(Image.new("L", (1, 1)))
     for _ in range(4):
         f = session.font(px)
         left, top, right, bottom = probe.textbbox((0, 0), text, font=f)
         width, height = right - left, bottom - top
-        if (width <= bw and height <= bh) or px <= MIN_FONT_PX:
+        if (width <= bw and height <= bh) or px <= floor:
             return f, (left, top, width, height)
         scale = min(bw / max(width, 1), bh / max(height, 1))
-        px = max(MIN_FONT_PX, min(px - 1, math.floor(px * scale)))
+        px = max(floor, min(px - 1, math.floor(px * scale)))
     f = session.font(px)
     left, top, right, bottom = probe.textbbox((0, 0), text, font=f)
     return f, (left, top, right - left, bottom - top)
 
 
+ELLIPSIS = "\u2026"
+
+
+class _TextFit:
+    """How one text layer came out, for lint: never affects the pixels."""
+
+    def __init__(self, index: int, requested: int, used: int, clipped: bool,
+                 behind: tuple[int, int, int], color: tuple[int, int, int, int],
+                 shortened: bool = False):
+        self.index, self.requested, self.used, self.clipped = index, requested, used, clipped
+        self.behind, self.color, self.shortened = behind, color, shortened
+
+
+def _ellipsize(text: str, font, bw: int) -> str:
+    """Longest prefix of text, plus an ellipsis, whose width fits bw (binary
+    search: about log2(500) measurements, never one per character)."""
+    probe = ImageDraw.Draw(Image.new("L", (1, 1)))
+
+    def fits(n: int) -> bool:
+        left, _, right, _ = probe.textbbox((0, 0), text[:n].rstrip() + ELLIPSIS, font=font)
+        return right - left <= bw
+
+    lo, hi = 0, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if fits(mid):
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo].rstrip() + ELLIPSIS
+
+
+def _floor_px(layer: dict[str, Any], px: int, height: int) -> int:
+    if "min_size" in layer:
+        return max(MIN_FONT_PX, min(px, round(layer["min_size"] * height)))
+    # Ellipsis without a floor keeps the set size; shrink goes as small as it must.
+    return px if layer.get("overflow") == "ellipsis" else MIN_FONT_PX
+
+
+def _layer_text(layer: dict[str, Any], key: str, values: dict[str, Any], missing: list[str],
+                hidden: list[tuple[int, list[str]]] | None, index: int, limit) -> str | None:
+    """The substituted text, or None if the layer hides itself because a
+    variable in it is empty (hide_if_empty)."""
+    empty: list[str] = []
+    text = substitute(layer[key], values, empty, limit=limit)
+    missing.extend(empty)
+    if empty and layer.get("hide_if_empty"):
+        if hidden is not None:
+            hidden.append((index, empty))
+        return None
+    return text
+
+
 def _draw_text(img: Image.Image, session: _Session, layer: dict[str, Any],
-               values: dict[str, Any], missing: list[str]) -> None:
-    text = substitute(layer["text"], values, missing)
-    if not text.strip():
+               values: dict[str, Any], missing: list[str],
+               fits: list[_TextFit] | None = None, index: int = 0,
+               hidden: list[tuple[int, list[str]]] | None = None) -> None:
+    text = _layer_text(layer, "text", values, missing, hidden, index, MAX_TEXT)
+    if text is None or not text.strip():
         return
     bx, by, bw, bh = _box_px(layer["box"], img.size)
     px = max(MIN_FONT_PX, round(layer["size"] * img.height))
-    f, (left, top, width, height) = _fit_font(session, text, px, bw, bh)
+    f, (left, top, width, height) = _fit_font(session, text, px, bw, bh,
+                                              _floor_px(layer, px, img.height))
+    shortened = False
+    if layer.get("overflow") == "ellipsis" and width > bw:
+        text, shortened = _ellipsize(text, f, bw), True
+        left, top, right, bottom = ImageDraw.Draw(Image.new("L", (1, 1))).textbbox((0, 0), text, font=f)
+        width, height = right - left, bottom - top
+    color = _rgba(layer.get("color"), (255, 255, 255, 255))
+    if fits is not None:
+        behind = ImageStat.Stat(img.crop((bx, by, bx + bw, by + bh)).convert("RGB")).mean
+        fits.append(_TextFit(index, px, round(f.size), width > bw or height > bh,
+                             tuple(round(c) for c in behind), color, shortened))
     align = layer.get("align", "center")
     x = 0 if align == "left" else bw - width if align == "right" else (bw - width) // 2
     y = (bh - height) // 2
     # Draw into a box-sized layer: bounded memory, and nothing spills outside the box.
     box_layer = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
-    ImageDraw.Draw(box_layer).text((x - left, y - top), text, font=f,
-                                   fill=_rgba(layer.get("color"), (255, 255, 255, 255)))
+    ImageDraw.Draw(box_layer).text((x - left, y - top), text, font=f, fill=color)
     img.alpha_composite(box_layer, (bx, by))
 
 
-def _draw_qr(img: Image.Image, layer: dict[str, Any], values: dict[str, Any], missing: list[str]) -> None:
-    data = substitute(layer["data"], values, missing, limit=None)
+def _draw_qr(img: Image.Image, layer: dict[str, Any], values: dict[str, Any], missing: list[str],
+             index: int = 0, hidden: list[tuple[int, list[str]]] | None = None) -> None:
+    data = _layer_text(layer, "data", values, missing, hidden, index, None)
     if not data:
         return
     if len(data) > MAX_QR:
@@ -210,6 +276,12 @@ def render_with_report(template: dict[str, Any], values: dict[str, Any],
     """Render and also return the variable paths that had no printable value.
 
     Raises only TemplateError, whatever the template, values or assets contain."""
+    img, missing, _, _ = _render(template, values, assets)
+    return img, missing
+
+
+def _render(template: dict[str, Any], values: dict[str, Any], assets: AssetResolver,
+            fits: list[_TextFit] | None = None, hidden: list[tuple[int, list[str]]] | None = None):
     problems = validate(template)
     if problems:
         raise TemplateError(problems)
@@ -217,15 +289,15 @@ def render_with_report(template: dict[str, Any], values: dict[str, Any],
     missing: list[str] = []
     try:
         img = _canvas(template, session)
-        for layer in template.get("layers", []):
+        for index, layer in enumerate(template.get("layers", [])):
             kind = layer["type"]
             if kind == "text":
-                _draw_text(img, session, layer, values, missing)
+                _draw_text(img, session, layer, values, missing, fits, index, hidden)
             elif kind == "qr":
-                _draw_qr(img, layer, values, missing)
+                _draw_qr(img, layer, values, missing, index, hidden)
             else:
                 _draw_image(img, session, layer)
-        return _flatten(img), missing
+        return _flatten(img), missing, fits or [], hidden or []
     except TemplateError:
         raise
     except (ValueError, TypeError, OverflowError, UnicodeError, OSError, MemoryError) as e:
@@ -248,18 +320,66 @@ def _missing_glyphs(session: _Session, text: str, notdef: bytes) -> list[str]:
     return sorted({ch for ch in set(text) if not ch.isspace() and pixels(ch) == notdef})
 
 
+SHRINK_WARNING = 0.5  # warn when text had to drop below half its set size
+LARGE_TEXT = 0.03  # of canvas height: WCAG's large-text threshold applies
+
+
+def _luminance(rgb: tuple[int, int, int]) -> float:
+    def channel(c: int) -> float:
+        c = c / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(c) for c in rgb[:3])
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast_ratio(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
+    """WCAG 2 contrast ratio, 1 to 21."""
+    la, lb = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def _over(fg: tuple[int, int, int, int], bg: tuple[int, int, int]) -> tuple[int, int, int]:
+    alpha = fg[3] / 255
+    return tuple(round(f * alpha + b * (1 - alpha)) for f, b in zip(fg[:3], bg))
+
+
+def _fit_warnings(fits: list[_TextFit], height: int) -> list[str]:
+    warnings = []
+    for fit in fits:
+        where = f"layer {fit.index}"
+        if fit.clipped:
+            warnings.append(f"{where}: text does not fit its box even at {fit.used}px; it is cut off")
+        elif fit.shortened:
+            warnings.append(f"{where}: text shortened with \u2026 to fit its box")
+        elif fit.used < fit.requested * SHRINK_WARNING:
+            warnings.append(f"{where}: text shrank from {fit.requested}px to {fit.used}px to fit its box")
+        ratio = contrast_ratio(_over(fit.color, fit.behind), fit.behind)
+        needed = 3.0 if fit.used >= LARGE_TEXT * height else 4.5
+        if ratio < needed:
+            warnings.append(f"{where}: low contrast {ratio:.1f}:1 against what is behind it "
+                            f"(WCAG asks for {needed:g}:1)")
+    return warnings
+
+
 def lint(template: dict[str, Any], values: dict[str, Any], assets: AssetResolver) -> list[str]:
-    """Warnings a designer should see: invalid template, missing values, missing glyphs."""
+    """Warnings a designer should see: invalid template, missing values, missing
+    glyphs, text that shrank or is cut off, and low text contrast (WCAG)."""
     problems = validate(template)
     if problems:
         return problems
     warnings: list[str] = []
     try:
-        _, missing = render_with_report(template, values, assets)
+        img, missing, fits, hidden = _render(template, values, assets, fits=[], hidden=[])
     except TemplateError as e:
         return e.problems
-    for path in sorted(set(missing)):
+    hidden_paths = {path for _, paths in hidden for path in paths}
+    for index, paths in hidden:
+        names = ", ".join(f"{{{{{p}}}}}" for p in dict.fromkeys(paths))
+        warnings.append(f"layer {index}: hidden because {names} has no value")
+    for path in sorted(set(missing) - hidden_paths):
         warnings.append(f"no value for {{{{{path}}}}}; it renders empty")
+    warnings.extend(_fit_warnings(fits, img.height))
     session = _Session(assets)
     notdef_img = Image.new("L", (96, 96), 0)
     ImageDraw.Draw(notdef_img).text((16, 16), "\U0010FFFD", font=session.font(48), fill=255)
