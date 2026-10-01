@@ -2,7 +2,7 @@
   "package": "wallrender",
   "version": "0.3.0",
   "source": "https://github.com/ball42/enhanced-watermark-overlay-kit",
-  "commit": "d7b1d409c0a269b65550de17bb56182e4af26767",
+  "commit": "cf945907bab98cb10bc721af9dae62c4547d76d9",
   "pillow_min": [
     10,
     1
