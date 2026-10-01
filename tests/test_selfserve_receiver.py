@@ -336,3 +336,53 @@ def test_post_without_id_is_400_and_runs_nothing(
     resp = client.post("/selfserve/reset-ipad", data=data)
     assert resp.status_code == 400
     assert fake_popen.calls == []
+
+
+# --- getting back to the start page from a full-screen web clip ---------------
+# A web clip has no browser chrome: no reload, no pull-to-refresh. After a
+# run the person was stuck on the result page, and going back restored the
+# confirm page from the back-forward cache with its button still disabled.
+
+
+def _back_form_fields(body):
+    import re
+
+    form = re.search(
+        r'<form method="GET" action="/selfserve/reset-ipad"(.*?)</form>',
+        body,
+        re.S,
+    )
+    assert form, "result page has no way back to the start page"
+    return dict(
+        re.findall(r'name="([^"]+)" value="([^"]*)"', form.group(1))
+    )
+
+
+@pytest.mark.parametrize("return_code, status", [(0, 200), (20, 500)])
+def test_result_page_links_back_to_the_start_page(
+    client, jawa_env, fake_popen, return_code, status
+):
+    _make_service(jawa_env)
+    fake_popen.return_code = return_code
+    resp = client.post("/selfserve/reset-ipad", data=GOOD_QUERY)
+    assert resp.status_code == status
+    body = resp.get_data(as_text=True)
+    assert "Back to start" in body
+    fields = _back_form_fields(body)
+    assert fields == GOOD_QUERY
+    # Following it renders the confirm page again and runs nothing.
+    again = client.get("/selfserve/reset-ipad", query_string=fields)
+    assert again.status_code == 200
+    assert "Erase and reset" in again.get_data(as_text=True)
+    assert len(fake_popen.calls) == 1
+
+
+def test_confirm_button_is_re_enabled_when_the_page_is_restored(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    body = client.get(
+        "/selfserve/reset-ipad", query_string=GOOD_QUERY
+    ).get_data(as_text=True)
+    assert "pageshow" in body
+    assert ".disabled = false" in body

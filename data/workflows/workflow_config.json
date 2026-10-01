@@ -354,7 +354,8 @@
             "page_description": "Apply the standard wallpaper with this device's identifying details.",
             "confirm_label": "Apply wallpaper",
             "success_message": "The wallpaper is on its way. It can take a minute to appear.",
-            "failure_message": "The wallpaper could not be applied. Please tell IT."
+            "failure_message": "The wallpaper could not be applied. Please tell IT.",
+            "cooldown_minutes": 5
         },
         "api_privileges": [
             "Read Mobile Devices",

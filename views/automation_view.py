@@ -45,6 +45,7 @@ from bin.auth import login_required
 from bin.data_store import (
     add_cron,
     add_webhook,
+    clear_selfserve_cooldowns,
     get_all_crons,
     get_all_webhooks,
     get_cron_by_name,
@@ -240,6 +241,25 @@ def detail(auto_type: str, name: str) -> Union[Response, str]:
         auto_type=auto_type,
         automation=automation,
         detail_fields=detail_fields,
+    )
+
+
+@blueprint.route(
+    "/automations/selfserve/<name>/reset-cooldowns", methods=["POST"]
+)
+@login_required
+def reset_cooldowns(name: str) -> Response:
+    """Admin override: let every device run this service again now."""
+    automation = get_webhook_by_name(name)
+    if not automation or automation.get("tag") != "selfserve":
+        abort(404)
+    clear_selfserve_cooldowns(automation["name"])
+    logthis.info(
+        f"{session.get('username')} reset the cooldowns for self-serve "
+        f"automation {automation['name']}."
+    )
+    return redirect(
+        url_for("automations.detail", auto_type="selfserve", name=name)
     )
 
 

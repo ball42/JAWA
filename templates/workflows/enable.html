@@ -113,6 +113,11 @@
                        value="{{ selfserve_defaults[key] }}" required>
             </div>
             {% endfor %}
+            <div class="mb-3">
+                <label for="ss-cooldown_minutes" class="form-label enable-param-label">Cooldown per device (minutes, 0 for none)</label>
+                <input type="number" name="cooldown_minutes" id="ss-cooldown_minutes" class="form-control"
+                       min="0" max="1440" step="1" value="{{ selfserve_defaults.cooldown_minutes or 0 }}" required>
+            </div>
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" name="create_profile" id="create_profile" value="on" checked>
                 <label class="form-check-label" for="create_profile">Create the web clip configuration profile in Jamf Pro (unscoped)</label>

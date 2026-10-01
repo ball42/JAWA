@@ -733,7 +733,7 @@ def _enable_selfserve(workflow: Dict[str, Any], credentials: list):
         # Form values win; the catalog supplies anything left blank.
         merged = {
             key: (request.form.get(key) or defaults.get(key, ""))
-            for key in PAGE_FIELDS + ("device_family",)
+            for key in PAGE_FIELDS + ("device_family", "cooldown_minutes")
         }
         session_data = {
             "url": session.get("url", ""),

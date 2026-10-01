@@ -40,6 +40,16 @@
         </div>
         {% endif %}
 
+        {% if auto_type == 'selfserve' and automation.cooldown_minutes %}
+        <form method="POST" action="/automations/selfserve/{{ automation.name }}/reset-cooldowns"
+              class="text-center mt-3">
+            <button type="submit" class="btn btn-outline-secondary btn-sm"
+                    title="Let every device run this service again now">
+                Reset cooldowns
+            </button>
+        </form>
+        {% endif %}
+
         <div class="d-flex justify-content-center mt-4 gap-2">
             <a href="/automations/{{ auto_type }}" class="btn btn-secondary btn-action">Back</a>
             {% if handler.supports_edit %}

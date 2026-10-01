@@ -28,6 +28,7 @@
 
 import json
 import os
+import threading
 from typing import Any, Dict, List, Optional
 
 from werkzeug.utils import secure_filename
@@ -48,6 +49,9 @@ WEBHOOK_SCHEMAS_FILE = os.path.abspath(
     os.path.join(_base_dir, "data", "webhook_schemas.json")
 )
 SCRIPTS_DIR = os.path.abspath(os.path.join(_base_dir, "scripts"))
+COOLDOWNS_FILE = os.path.abspath(
+    os.path.join(_base_dir, "data", "selfserve_cooldowns.json")
+)
 
 
 # --- Low-level I/O ---
@@ -270,3 +274,71 @@ def retire_script(path: str) -> None:
     """Rename a script to .old instead of deleting it."""
     if os.path.exists(path):
         os.rename(path, f"{path}.old")
+
+
+# --- Self-serve cooldowns ---
+#
+# {service: {jss_id: last run start (unix seconds)}}. Waitress serves
+# from threads in one process, so a lock makes check-and-claim atomic.
+
+_cooldown_lock = threading.Lock()
+
+
+def _cooldown_left(started: float, minutes: int, now: float) -> int:
+    return max(0, int(started + minutes * 60 - now))
+
+
+def selfserve_cooldown_remaining(
+    service: str, jss_id: int, minutes: int, now: float
+) -> int:
+    """Seconds until this device may run this service again (0 = now)."""
+    if minutes <= 0:
+        return 0
+    with _cooldown_lock:
+        runs = _read_json(COOLDOWNS_FILE, {}).get(service, {})
+    started = runs.get(str(jss_id))
+    return _cooldown_left(started, minutes, now) if started else 0
+
+
+def claim_selfserve_run(
+    service: str, jss_id: int, minutes: int, now: float
+) -> int:
+    """Start a run: 0 if claimed, else the seconds left to wait.
+
+    Claimed before the script runs, so a second request arriving while
+    the first is still running is refused rather than run twice.
+    """
+    if minutes <= 0:
+        return 0
+    with _cooldown_lock:
+        data = _read_json(COOLDOWNS_FILE, {})
+        runs = data.setdefault(service, {})
+        started = runs.get(str(jss_id))
+        if started and _cooldown_left(started, minutes, now):
+            return _cooldown_left(started, minutes, now)
+        runs[str(jss_id)] = now
+        # Drop claims older than a day so the file stays small.
+        for name in list(data):
+            data[name] = {
+                k: v for k, v in data[name].items() if now - v < 86400
+            }
+            if not data[name]:
+                del data[name]
+        _write_json(COOLDOWNS_FILE, data)
+    return 0
+
+
+def release_selfserve_run(service: str, jss_id: int) -> None:
+    """Undo a claim after a failed run, so the person can retry."""
+    with _cooldown_lock:
+        data = _read_json(COOLDOWNS_FILE, {})
+        if data.get(service, {}).pop(str(jss_id), None) is not None:
+            _write_json(COOLDOWNS_FILE, data)
+
+
+def clear_selfserve_cooldowns(service: str) -> None:
+    """Admin override: every device may run the service again now."""
+    with _cooldown_lock:
+        data = _read_json(COOLDOWNS_FILE, {})
+        if data.pop(service, None) is not None:
+            _write_json(COOLDOWNS_FILE, data)

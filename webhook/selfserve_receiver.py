@@ -206,6 +206,26 @@ def _page_strings(service: Dict[str, Any], params: Dict[str, str]):
     }
 
 
+def _now() -> float:
+    return time.time()
+
+
+def _cooldown_minutes(service: Dict[str, Any]) -> int:
+    try:
+        return max(0, int(service.get("cooldown_minutes") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def cooldown_message(seconds: int) -> str:
+    if seconds < 60:
+        wait = "under a minute"
+    else:
+        minutes = -(-seconds // 60)  # round up
+        wait = f"about {minutes} minute{'s' if minutes != 1 else ''}"
+    return f"This was just done. You can run it again in {wait}."
+
+
 @blueprint.route("/selfserve/<service_name>", methods=["GET"])
 def service_page(service_name: str):
     logthis.info(f"Incoming GET at /selfserve/{service_name} ...")
@@ -215,8 +235,12 @@ def service_page(service_name: str):
         jss_id, udid, params = parse_device_request(fields)
     except SelfServeRequestError as err:
         return err.message, err.status
+    wait = data_store.selfserve_cooldown_remaining(
+        service["name"], jss_id, _cooldown_minutes(service), _now()
+    )
     return render_template(
         "selfserve/confirm.html",
+        cooldown=cooldown_message(wait) if wait else "",
         service_name=service["name"],
         strings=_page_strings(service, params),
         token=fields.get("token", ""),
@@ -239,6 +263,31 @@ def service_run(service_name: str):
         service, jss_id, udid, params, _remote_address()
     )
     strings = _page_strings(service, params)
+    back = {
+        "service_name": service["name"],
+        "token": request.form.get("token", ""),
+        "jss_id": jss_id,
+        "udid": udid,
+        "params": params,
+    }
+    wait = data_store.claim_selfserve_run(
+        service["name"], jss_id, _cooldown_minutes(service), _now()
+    )
+    if wait:
+        logthis.info(
+            f"Self-serve {service['name']} refused for device {jss_id}: "
+            f"cooldown, {wait}s left."
+        )
+        return (
+            render_template(
+                "selfserve/result.html",
+                strings=strings,
+                succeeded=False,
+                cooldown=cooldown_message(wait),
+                **back,
+            ),
+            429,
+        )
     logthis.info(
         f"Self-serve {service['name']} confirmed for device {jss_id} "
         f"from {payload['event']['remoteAddress']}; running script..."
@@ -246,6 +295,7 @@ def service_run(service_name: str):
     try:
         script_results(payload, service)
     except ScriptExecutionError as err:
+        data_store.release_selfserve_run(service["name"], jss_id)
         logthis.error(
             f"Self-serve {service['name']} failed for device {jss_id}: "
             f"{err}"
@@ -255,9 +305,10 @@ def service_run(service_name: str):
                 "selfserve/result.html",
                 strings=strings,
                 succeeded=False,
+                **back,
             ),
             500,
         )
     return render_template(
-        "selfserve/result.html", strings=strings, succeeded=True
+        "selfserve/result.html", strings=strings, succeeded=True, **back
     )
