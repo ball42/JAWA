@@ -4,8 +4,8 @@
   "source": "https://github.com/ball42/enhanced-watermark-overlay-kit",
   "commit": "cf945907bab98cb10bc721af9dae62c4547d76d9",
   "pillow_min": [
-    10,
-    1
+    11,
+    3
   ],
   "pillow_below": [
     12,
