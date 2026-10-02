@@ -187,6 +187,9 @@ def jawa_env(tmp_path, monkeypatch):
     scripts = str(env.scripts_dir)
     log_file = str(env.log_file)
 
+    from webhook import selfserve_receiver
+
+    selfserve_receiver.reset_rate_limits()  # per-process state, per test
     monkeypatch.setattr(data_store, "WEBHOOKS_FILE", webhooks)
     monkeypatch.setattr(
         data_store,

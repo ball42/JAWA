@@ -456,14 +456,17 @@ def _apply_brander_settings(script: str, form: Mapping[str, Any]) -> str:
         return ""
     note = ""
     try:
-        if form.get("brander_refresh") == "on":
-            brander_settings.refresh_script(script, BRANDER_SOURCE)
-            note = " Updated to the latest Brander script."
         updates = {
             key: form.get(f"brander_{key}")
             for key in brander_settings.SETTINGS
             if form.get(f"brander_{key}") is not None
         }
+        # Check every setting before touching the script, so a bad value
+        # never leaves a half-applied edit (for example a refreshed script).
+        brander_settings.validate(updates)
+        if form.get("brander_refresh") == "on":
+            brander_settings.refresh_script(script, BRANDER_SOURCE)
+            note = " Updated to the latest Brander script."
         if updates:
             brander_settings.write_settings(script, updates)
     except brander_settings.SettingsError as err:

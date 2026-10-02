@@ -154,6 +154,12 @@ def fetch_verified_device(jss_id, udid):
             sys.exit(21)
         print(f"Jamf Pro refused the device lookup: {jamf_error(err.response)}")
         sys.exit(22)
+    except requests.RequestException as err:
+        print(f"Could not reach Jamf Pro for the device lookup: {type(err).__name__}.")
+        sys.exit(22)
+    if not isinstance(record, dict):
+        print("Jamf Pro's device lookup did not return JSON.")
+        sys.exit(22)
     device = record.get("mobile_device", {})
     actual = str(device.get("general", {}).get("udid", "")).strip().lower()
     if not actual or actual != str(udid).strip().lower():
@@ -484,8 +490,9 @@ def tenant_key(server_url):
     """Same rule as bin/brander_store.py: the tenant's host (and port)."""
     parsed = urlparse(server_url or "")
     host = (parsed.hostname or "").lower()
-    if parsed.port:
-        host = f"{host}-{parsed.port}"
+    port = parsed.port
+    if port and port != {"https": 443, "http": 80}.get(parsed.scheme.lower()):
+        host = f"{host}-{port}"
     host = re.sub(r"[^a-z0-9.-]", "-", host).strip(".-")
     return host or "default"
 
@@ -535,7 +542,10 @@ def template_wallpaper(path, device, max_bytes):
     source = label or source
     full = path if os.path.isabs(path) else os.path.join(ASSETS_DIR, path)
     folders = [os.path.dirname(full), ASSETS_DIR]
-    problems = renderer.validate(template)
+    try:
+        problems = renderer.validate(template)
+    except Exception as err:  # noqa: BLE001 -- a crafted template must not crash the script
+        problems = [f"validation failed: {type(err).__name__}"]
     if problems:
         print("Template is invalid: " + "; ".join(problems[:5]))
         sys.exit(30)
@@ -586,16 +596,20 @@ def set_wallpaper(image_bytes, jss_id, setting=None):
         "</mobile_devices></mobile_device_command>"
     )
     config = Config()
-    resp = requests.post(
-        f"{config.server_url}/JSSResource/mobiledevicecommands/command/"
-        "Wallpaper",
-        headers={
-            "Authorization": f"Bearer {get_oauth_token()}",
-            "Content-Type": "application/xml",
-        },
-        data=body,
-        timeout=60,
-    )
+    try:
+        resp = requests.post(
+            f"{config.server_url}/JSSResource/mobiledevicecommands/command/"
+            "Wallpaper",
+            headers={
+                "Authorization": f"Bearer {get_oauth_token()}",
+                "Content-Type": "application/xml",
+            },
+            data=body,
+            timeout=60,
+        )
+    except requests.RequestException as err:
+        print(f"Could not send the Wallpaper command: {type(err).__name__}.")
+        sys.exit(24)
     if resp.status_code >= 400:
         print(f"Wallpaper command refused: {jamf_error(resp)}")
         sys.exit(24)

@@ -93,6 +93,11 @@ def _validated(updates: Dict[str, str]) -> Dict[str, str]:
     return source
 
 
+def validate(updates: Dict[str, str]) -> None:
+    """Raise SettingsError listing every bad value; write nothing."""
+    _validated(updates)
+
+
 def _write(path: str, text: str) -> None:
     """Replace the script atomically, keeping its owner-only mode."""
     mode = os.stat(path).st_mode & 0o777
