@@ -7,7 +7,7 @@ its Jamf Pro id, then sets it on that device with the Wallpaper MDM
 command. The payload names ONE device by id and UDID; the UDID must
 match Jamf Pro's record before anything is sent (ADR-0012).
 
-Originally written for webhook events by Chris Ball (2021), with
+Originally written for webhook events by ball42 (2021), with
 updates by David Raabe and Tim Knox.
 
 With a template configured, the wallpaper is rendered by wallrender
