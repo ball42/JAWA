@@ -384,18 +384,27 @@ def resolve_template(path, device):
     return template, os.path.basename(chosen)
 
 
-def build_values(device):
+def build_values(device, template=None):
     """The only device data a template can print: fields of the
-    UDID-verified record, never anything from the request."""
+    UDID-verified record, never anything from the request. A template
+    with role variants also gets `role`: the value of the one extension
+    attribute it names, and no other attribute."""
     general = device.get("general", {})
     location = device.get("location", {})
-    return {
+    values = {
         "device_name": general.get("device_name", ""),
         "serial_number": general.get("serial_number", ""),
         "asset_tag": general.get("asset_tag", ""),
         "jss_id": general.get("id", ""),
         "location": {"building": location.get("building", "")},
     }
+    attribute = ((template or {}).get("roles") or {}).get("attribute")
+    if attribute:
+        for ea in device.get("extension_attributes", []):
+            if ea.get("name") == attribute:
+                values["role"] = str(ea.get("value") or "").strip()
+                break
+    return values
 
 
 def read_asset(asset_id):
@@ -433,7 +442,7 @@ def template_wallpaper(path, device, max_bytes):
     try:
         image = run_with_timeout(
             lambda: encode_within_budget(
-                render_template(renderer, template, build_values(device)),
+                render_template(renderer, template, build_values(device, template)),
                 max_bytes,
             ),
             RENDER_TIMEOUT,

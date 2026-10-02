@@ -1,8 +1,8 @@
 {
   "package": "wallrender",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "source": "https://github.com/ball42/enhanced-watermark-overlay-kit",
-  "commit": "cf945907bab98cb10bc721af9dae62c4547d76d9",
+  "commit": "f92812fb2977d75da5358c6fa1e0f97de7be5347",
   "pillow_min": [
     11,
     3
@@ -13,13 +13,16 @@
   ],
   "files": {
     "LICENSE": "3bf1b34723063dec72e36a455d1eb3f648128eeba82da417dc9f6ed9b4fac5f8",
-    "__init__.py": "07ca4cff0fd937f8c8a684ecd980247cce936695dd42ff8317a3d66f6b1f0724",
+    "__init__.py": "3680b619913377f5b7e69ede4a1a1e094864f02e5da37b97d653ed5914c19cdd",
     "__main__.py": "13a1a5b340cdcfc1902b62be90e508c7c71886000d5bf087e7854aadf09fb35e",
-    "cli.py": "b1ef9f67a56c6fee5cf38a50c0219d261931451a4a26f4a0ba5c93669880d376",
+    "cli.py": "b8ff800154e0bed8936d49eb2f70d623fc273a04cfb17a7e421d6db40cc6bb6d",
+    "device_profiles.json": "cf99d4b5f4ee63ef93cc190b7a0f8d3cfa60f9b0ec3bc788fdbc0cef491bb4c9",
+    "devices.py": "b7c9d4576d4881a1032d521c41147d6e8f57b9a54e95f51f641e9fb5025bc52b",
     "fonts/NotoSans.ttf": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
     "fonts/OFL.txt": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
-    "render.py": "d24a36aa83579e613d251a32f1e64fc72681212e5452a0a4f91fdbb054b19412",
-    "schema.py": "8be4e6f58c456863074ab6bfe1745fbecba3ba3d34bb4af753a9a505d5f37cdf",
-    "variables.py": "966d46df46d2c7a371a1b2b75650e84bcfc6efa5c08d6900d641ec31bb6d5dcd"
+    "render.py": "b5b4f1cf4fb927a71c25758f519e7cc69dbaf699798f33bf2d9639d11664cfbe",
+    "roles.py": "8ac790a0cdde91f327d97cef400d58b092fe930b35429f63ed3d112aebec4cba",
+    "schema.py": "bb96c377fb2fe341415fc35299df21e3545783ac1a0678aca494a5b5100b526f",
+    "variables.py": "f6cf46cafa1297c280c8bc6cb0dbf3bb583a3b81e3e780a736e08e0684a98e11"
   }
 }
