@@ -88,3 +88,19 @@ def test_enable_form_suggests_stored_and_shipped_templates(logged_in_client, jaw
     assert 'list="templatePathOptions"' in body
     for option in ("legacy", "store:ward-ipads", "example-set.json", "example-template.json"):
         assert f'<option value="{option}"' in body
+
+
+def test_store_page_says_which_branders_use_each_template(logged_in_client, jawa_env, tmp_path):
+    from tests.test_brander_settings import _service, deployed
+
+    upload(logged_in_client, package())
+    _service(jawa_env, deployed(tmp_path, **{'"__JAWA_TEMPLATE_PATH__"': repr("store:ward-ipads")}))
+    body = logged_in_client.get("/brander/templates").get_data(as_text=True)
+    assert "Used by: brand-device" in body
+
+
+def test_store_page_says_when_nothing_uses_a_template(logged_in_client, jawa_env):
+    upload(logged_in_client, package())
+    body = logged_in_client.get("/brander/templates").get_data(as_text=True)
+    assert "Not used by any Brander yet" in body
+    assert "store:ward-ipads" in body

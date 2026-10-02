@@ -10,8 +10,9 @@ from typing import Union
 
 from flask import Blueprint, Response, redirect, render_template, request, session, url_for
 
-from bin import brander_store, logger
+from bin import brander_settings, brander_store, logger
 from bin.auth import login_required
+from bin.data_store import get_webhooks_by_tag
 
 logthis = logger.setup_child_logger("jawa", "brander_view")
 
@@ -25,9 +26,23 @@ def timestamp_to_text(seconds: int) -> str:
     return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(seconds))
 
 
+def used_by() -> dict:
+    """slug -> names of the self-serve Branders whose template is store:<slug>."""
+    found: dict = {}
+    for entry in get_webhooks_by_tag("selfserve"):
+        script = entry.get("script", "")
+        if brander_settings.is_brander_script(script):
+            path = str(brander_settings.read_settings(script).get("template_path") or "")
+            if path.startswith("store:"):
+                slug = brander_store.slugify(path[len("store:"):])
+                found.setdefault(slug, []).append(entry.get("name", ""))
+    return found
+
+
 def _page(status=200, **context) -> tuple:
     templates = brander_store.list_templates(session.get("url", ""))
-    return render_template("brander/templates.html", templates=templates, **context), status
+    return render_template("brander/templates.html", templates=templates,
+                           used_by=used_by(), **context), status
 
 
 @blueprint.route("/brander/templates", methods=["GET"])
