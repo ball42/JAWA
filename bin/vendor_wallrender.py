@@ -28,9 +28,10 @@ SOURCE_PREFIX = "wallrender/wallrender/"
 LICENSE_SOURCE = "wallrender/LICENSE"
 
 # Pillow versions the deployed Brander accepts: JAWA's requirements.txt
-# range, which sits inside wallrender's own (>=10.1,<13). Pixels are only
-# identical to the EWOK preview on the same Pillow, so keep this narrow.
-PILLOW_MIN = [10, 1]
+# range. EWOK pins the same range, because text pixels differ between
+# Pillow releases (11.3 vs 12.3 measured 2026-10-01), and the preview must
+# be what a device gets. Change both repos together.
+PILLOW_MIN = [11, 3]
 PILLOW_BELOW = [12, 0]
 
 
