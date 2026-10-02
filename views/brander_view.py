@@ -168,6 +168,21 @@ def _folder_assets(folders: List[str]):
     return resolve
 
 
+def _device_fit(wallrender, template, size, model_identifier) -> Dict[str, Any]:
+    """Layers cut off or covered on the device's family of screens (every
+    iPhone or iPad profile), for the template's screen (both: lock)."""
+    from wallrender import devices
+
+    family = brander_values.device_family(model_identifier)
+    profiles = [p for p in devices.device_profiles() if p["family"] == family] or devices.device_profiles()
+    screen = "home" if template.get("screen") == "home" else "lock"
+    return {
+        "devices": [p["name"] for p in profiles],
+        "screen": screen,
+        "warnings": devices.fit_warnings(template, size, [p["id"] for p in profiles], screen),
+    }
+
+
 def _preview_page(status=200, **context) -> tuple:
     return render_template("brander/preview.html", choices=preview_choices(),
                            **context), status
@@ -212,9 +227,10 @@ def preview() -> Union[Response, str, tuple]:
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
     general = device.get("general", {})
+    fit = _device_fit(wallrender, template, image.size, general.get("model_identifier", ""))
     logthis.info(f"{session.get('username')} previewed {chosen} for device {jss_text} (nothing sent).")
     return _preview_page(
-        form=form, chosen=chosen, warnings=warnings,
+        form=form, chosen=chosen, warnings=warnings, fit=fit,
         image=base64.b64encode(buffer.getvalue()).decode("ascii"),
         size=image.size,
         device={"name": general.get("device_name", ""), "model": general.get("model_identifier", ""),
