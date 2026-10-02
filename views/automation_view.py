@@ -291,6 +291,7 @@ def edit(auto_type: str, name: str) -> Union[Response, str]:
 
     if request.method == "GET":
         ctx = handler.get_create_context(session_data)
+        ctx.update(handler.get_edit_context(existing))
         webhook_info = [existing]
         return render_template(
             "automations/edit.html",

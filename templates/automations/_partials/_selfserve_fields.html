@@ -51,6 +51,42 @@
        placeholder="Failure message" required
        value="{{ info.failure_message if info else '' }}">
 
+{% if edit_mode and brander_settings %}
+<fieldset class="mt-4">
+    <legend class="h6">Brander settings</legend>
+    <p class="form-text">Changes apply on the next tap. The web clip and its link stay the same.</p>
+    <label class="form-label" for="brander_template_path">Wallpaper template</label>
+    <input class="form-control" id="brander_template_path" name="brander_template_path"
+           value="{{ brander_settings.template_path }}" list="brander_template_options" required>
+    <datalist id="brander_template_options">
+        {% for option in brander_template_options %}<option value="{{ option }}">{% endfor %}
+    </datalist>
+    <small class="form-text">legacy, a template or set file in the assets folder, or store:&lt;name&gt; for a template under Extras, Brander templates.</small>
+    <label class="form-label mt-2" for="brander_wallpaper_setting">Wallpaper target</label>
+    <select class="form-control" id="brander_wallpaper_setting" name="brander_wallpaper_setting">
+        {% for value, label in [(1, 'Lock screen'), (2, 'Home screen'), (3, 'Both')] %}
+        <option value="{{ value }}" {% if brander_settings.wallpaper_setting == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    <label class="form-label mt-2" for="brander_max_kb">Largest wallpaper to send (KB)</label>
+    <input class="form-control" type="number" min="50" max="20000" id="brander_max_kb" name="brander_max_kb"
+           value="{{ brander_settings.max_kb }}" required>
+    {% if brander_settings.allow_person_fields is not none %}
+    <label class="form-label mt-2" for="brander_allow_person_fields">Allow personal fields</label>
+    <select class="form-control" id="brander_allow_person_fields" name="brander_allow_person_fields">
+        <option value="no" {% if brander_settings.allow_person_fields != 'yes' %}selected{% endif %}>No: user name, username and email stay empty</option>
+        <option value="yes" {% if brander_settings.allow_person_fields == 'yes' %}selected{% endif %}>Yes, for templates that ask for them</option>
+    </select>
+    {% endif %}
+    <div class="form-check mt-3">
+        <input class="form-check-input" type="checkbox" name="brander_refresh" id="brander_refresh" value="on">
+        <label class="form-check-label" for="brander_refresh">
+            Update to the latest Brander script (keeps these settings and the Jamf Pro credentials)
+        </label>
+    </div>
+</fieldset>
+{% endif %}
+
 {% if not edit_mode %}
 <div class="form-check mt-3">
     <input class="form-check-input" type="checkbox" name="create_profile"

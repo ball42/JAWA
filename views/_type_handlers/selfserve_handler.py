@@ -43,7 +43,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 import requests
 from flask import session
 
-from bin import logger
+from bin import brander_settings, logger
 from bin.data_store import (
     get_jawa_address,
     retire_script,
@@ -445,6 +445,32 @@ def _cooldown_label(automation: Dict[str, Any]) -> str:
     return f"{minutes} minute{'s' if minutes != 1 else ''} per device"
 
 
+BRANDER_SOURCE = os.path.join(_REPO_ROOT, "data", "workflows", "scripts", "self_serve_brander.py")
+
+
+def _apply_brander_settings(script: str, form: Mapping[str, Any]) -> str:
+    """Apply the edit form's Brander settings (and an optional script
+    update) to a Brander's deployed script. Returns a note for the
+    success message; raises AutomationError with every problem."""
+    if not brander_settings.is_brander_script(script):
+        return ""
+    note = ""
+    try:
+        if form.get("brander_refresh") == "on":
+            brander_settings.refresh_script(script, BRANDER_SOURCE)
+            note = " Updated to the latest Brander script."
+        updates = {
+            key: form.get(f"brander_{key}")
+            for key in brander_settings.SETTINGS
+            if form.get(f"brander_{key}") is not None
+        }
+        if updates:
+            brander_settings.write_settings(script, updates)
+    except brander_settings.SettingsError as err:
+        raise AutomationError("Brander settings", " ".join(err.problems)) from err
+    return note
+
+
 class SelfServeHandler(AutomationHandler):
     tag = "selfserve"
     display_name = "Self-Serve"
@@ -511,6 +537,17 @@ class SelfServeHandler(AutomationHandler):
             "custom_header": {"URL": url},
         }
 
+    def get_edit_context(self, automation: Dict) -> Dict[str, Any]:
+        script = automation.get("script", "")
+        if not brander_settings.is_brander_script(script):
+            return {}
+        from views.template_view import _template_path_options
+
+        return {
+            "brander_settings": brander_settings.read_settings(script),
+            "brander_template_options": _template_path_options(),
+        }
+
     def process_edit(
         self,
         form: Any,
@@ -531,6 +568,7 @@ class SelfServeHandler(AutomationHandler):
             existing["script"] = save_script(
                 files["new_file"], existing["name"]
             )
+        brander_note = _apply_brander_settings(existing["script"], form)
 
         extra_notice = None
         custom_header = None
@@ -557,7 +595,7 @@ class SelfServeHandler(AutomationHandler):
         )
         result = {
             "success_msg": (
-                f"Edited self-serve automation {existing['name']}."
+                f"Edited self-serve automation {existing['name']}.{brander_note}"
             )
         }
         if extra_notice:
