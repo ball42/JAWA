@@ -1,0 +1,90 @@
+{% extends "shared/_layout.html" %}
+
+{% block title %}Brander templates | JAWA{% endblock %}
+
+{% block additional_css %}
+<style>
+    .brander-store { max-width: 980px; margin: 2rem auto; }
+    .brander-store .lead { color: var(--color-text-secondary); }
+    .brander-template {
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface);
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.25rem;
+    }
+    .brander-template h2 { font-size: 1.15rem; margin: 0; }
+    .brander-setting { font-family: var(--font-mono); background: var(--color-surface-raised); padding: 0 6px; border-radius: var(--radius-sm); }
+    .brander-versions th, .brander-versions td { padding: .35rem .6rem; vertical-align: middle; }
+    .brander-active { font-weight: 600; }
+    .brander-active::before { content: "\2713 "; }
+    .brander-problems li::before { content: "Error: "; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container brander-store">
+    <h1 class="h3">Brander templates</h1>
+    <p class="lead">Wallpaper templates designed in EWOK, for this Jamf Pro tenant. Each upload is a new version; Brander sends the active one.</p>
+
+    {% if uploaded %}
+    <div class="alert alert-success" role="status">
+        Uploaded {{ uploaded.name }} as version {{ uploaded.version }}{% if uploaded.active %}, now active{% else %}. Activate it below when you are ready{% endif %}.
+    </div>
+    {% endif %}
+    {% if problems %}
+    <div class="alert alert-danger" role="alert">
+        <p class="mb-1">{% if filename %}{{ filename }} was not stored:{% else %}Not done:{% endif %}</p>
+        <ul class="brander-problems mb-0">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/brander/templates" enctype="multipart/form-data" class="mb-4">
+        <label for="package" class="form-label fw-semibold">Upload a template (.brander.json from EWOK)</label>
+        <div class="d-flex gap-2">
+            <input type="file" class="form-control" id="package" name="package" accept=".json,application/json" required>
+            <button type="submit" class="btn btn-jawa">Upload</button>
+        </div>
+    </form>
+
+    {% for t in templates %}
+    <section class="brander-template" aria-labelledby="t-{{ t.slug }}">
+        <h2 id="t-{{ t.slug }}">{{ t.name }}</h2>
+        <p class="mb-2">Brander setting: <span class="brander-setting">store:{{ t.slug }}</span></p>
+        <table class="table table-sm brander-versions">
+            <thead><tr><th scope="col">Version</th><th scope="col">Uploaded by</th><th scope="col">Uploaded</th><th scope="col">SHA-256</th><th scope="col">Status</th></tr></thead>
+            <tbody>
+            {% for v in t.versions | reverse %}
+            <tr>
+                <td>Version {{ v.version }}</td>
+                <td>{{ v.uploaded_by }}</td>
+                <td>{{ v.uploaded_at | int | timestamp_to_text }}</td>
+                <td><code>{{ v.sha256[:12] }}</code></td>
+                <td>
+                    {% if v.version == t.active %}
+                    <span class="brander-active">Active</span>
+                    {% else %}
+                    <form method="POST" action="/brander/templates/{{ t.slug }}/activate" class="d-inline">
+                        <input type="hidden" name="version" value="{{ v.version }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary">Activate version {{ v.version }}</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <details>
+            <summary>Activation history</summary>
+            <ul class="mb-0">
+            {% for a in t.activations | reverse %}
+                <li>Version {{ a.version }} activated by {{ a.by }}, {{ a.at | int | timestamp_to_text }}</li>
+            {% endfor %}
+            </ul>
+        </details>
+    </section>
+    {% else %}
+    <p>No templates yet. Design one in EWOK, choose "Download for JAWA's template store", and upload the .brander.json here.</p>
+    {% endfor %}
+</div>
+{% endblock %}
