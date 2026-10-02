@@ -59,6 +59,10 @@ class AutomationHandler(ABC):
     supports_edit: bool = True
     supports_auth: bool = False
 
+    def get_edit_context(self, automation: Dict) -> Dict[str, Any]:
+        """Extra template context for the edit form (none by default)."""
+        return {}
+
     @abstractmethod
     def get_create_context(self, session_data: Dict) -> Dict[str, Any]:
         """Return extra template context for the create form."""

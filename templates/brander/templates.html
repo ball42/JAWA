@@ -50,7 +50,11 @@
     {% for t in templates %}
     <section class="brander-template" aria-labelledby="t-{{ t.slug }}">
         <h2 id="t-{{ t.slug }}">{{ t.name }}</h2>
-        <p class="mb-2">Brander setting: <span class="brander-setting">store:{{ t.slug }}</span></p>
+        <p class="mb-1">Brander setting: <span class="brander-setting">store:{{ t.slug }}</span></p>
+        <p class="mb-2">
+            {% if used_by.get(t.slug) %}Used by: {{ used_by[t.slug] | join(", ") }}
+            {% else %}Not used by any Brander yet. To use it, edit a Brander (Automations, Self-Serve) and set its template to <span class="brander-setting">store:{{ t.slug }}</span>.{% endif %}
+        </p>
         <table class="table table-sm brander-versions">
             <thead><tr><th scope="col">Version</th><th scope="col">Uploaded by</th><th scope="col">Uploaded</th><th scope="col">SHA-256</th><th scope="col">Status</th></tr></thead>
             <tbody>
