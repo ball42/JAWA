@@ -416,6 +416,7 @@
                 "label": "Wallpaper template (JSON file, absolute or in the assets directory; legacy for the original layout)",
                 "placeholder": "legacy",
                 "default": "legacy",
+                "suggest": "brander_templates",
                 "token": "\"__JAWA_TEMPLATE_PATH__\"",
                 "type": "text"
             },

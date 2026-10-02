@@ -33,6 +33,7 @@ import re
 import signal
 import sys
 import time
+from urllib.parse import urlparse
 
 import qrcode
 import requests
@@ -452,22 +453,70 @@ def build_values(device, template=None):
     return values
 
 
-def read_asset(asset_id):
-    """PNG or JPEG bytes for a template asset id, from ASSETS_DIR only."""
+def read_asset(asset_id, folders=None):
+    """PNG or JPEG bytes for a template asset id: from the template's own
+    folder, then ASSETS_DIR, and never from anywhere else."""
     if ROLE_NAME.fullmatch(asset_id):
-        assets = os.path.realpath(ASSETS_DIR)
-        for ext in ("png", "jpg", "jpeg"):
-            path = os.path.realpath(
-                os.path.join(assets, f"{asset_id}.{ext}")
-            )
-            if path.startswith(assets + os.sep) and os.path.isfile(path):
-                with open(path, "rb") as handle:
-                    return handle.read()
+        for folder in folders or [ASSETS_DIR]:
+            assets = os.path.realpath(folder)
+            for ext in ("png", "jpg", "jpeg"):
+                path = os.path.realpath(
+                    os.path.join(assets, f"{asset_id}.{ext}")
+                )
+                if path.startswith(assets + os.sep) and os.path.isfile(path):
+                    with open(path, "rb") as handle:
+                        return handle.read()
     raise KeyError(asset_id)
 
 
-def render_template(renderer, template, values):
-    return renderer.render(template, values, read_asset)
+def render_template(renderer, template, values, folders=None):
+    return renderer.render(
+        template, values, lambda asset_id: read_asset(asset_id, folders)
+    )
+
+
+# --- the template store (M3-3): template setting "store:<slug>" ---
+
+STORE_DIR = None  # derived from this script's location unless set
+
+
+def tenant_key(server_url):
+    """Same rule as bin/brander_store.py: the tenant's host (and port)."""
+    parsed = urlparse(server_url or "")
+    host = (parsed.hostname or "").lower()
+    if parsed.port:
+        host = f"{host}-{parsed.port}"
+    host = re.sub(r"[^a-z0-9.-]", "-", host).strip(".-")
+    return host or "default"
+
+
+def _store_root():
+    if STORE_DIR:
+        return STORE_DIR
+    parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for root in (
+        os.path.join(os.path.dirname(parent), "brander_templates"),  # template copy
+        os.path.join(parent, "data", "brander_templates"),  # deployed copy
+    ):
+        if os.path.isdir(root):
+            return root
+    return os.path.join(parent, "data", "brander_templates")
+
+
+def store_template(slug):
+    """(path of the active version's template.json, 'store:<slug> vN')."""
+    slug = re.sub(r"[^a-z0-9]+", "-", slug.lower()).strip("-")
+    slug_dir = os.path.join(_store_root(), tenant_key(Config().server_url), slug)
+    try:
+        with open(os.path.join(slug_dir, "index.json"), encoding="utf-8") as handle:
+            active = json.load(handle).get("active")
+    except (OSError, ValueError):
+        active = None
+    path = os.path.join(slug_dir, f"v{active}", "template.json")
+    if not slug or not active or not os.path.isfile(path):
+        print(f"There is no active stored template {slug or '(blank)'} for this tenant.")
+        sys.exit(30)
+    return path, f"store:{slug} v{active}"
 
 
 def template_wallpaper(path, device, max_bytes):
@@ -479,7 +528,13 @@ def template_wallpaper(path, device, max_bytes):
     call finishes before it fires; wallrender's canvas caps bound how
     long any one call can take."""
     renderer = load_renderer()
+    label = None
+    if path.startswith("store:"):
+        path, label = store_template(path[len("store:"):].strip())
     template, source, digest = resolve_template(path, device)
+    source = label or source
+    full = path if os.path.isabs(path) else os.path.join(ASSETS_DIR, path)
+    folders = [os.path.dirname(full), ASSETS_DIR]
     problems = renderer.validate(template)
     if problems:
         print("Template is invalid: " + "; ".join(problems[:5]))
@@ -487,7 +542,7 @@ def template_wallpaper(path, device, max_bytes):
     try:
         image = run_with_timeout(
             lambda: encode_within_budget(
-                render_template(renderer, template, build_values(device, template)),
+                render_template(renderer, template, build_values(device, template), folders),
                 max_bytes,
             ),
             RENDER_TIMEOUT,

@@ -97,7 +97,14 @@
                 <input type="{{ param.type or 'text' }}" name="{{ param.key }}" id="param-{{ param.key }}"
                        class="form-control" placeholder="{{ param.placeholder }}"
                        {% if param.default is defined %}value="{{ param.default }}"{% endif %}
+                       {% if param.suggest == 'brander_templates' %}list="templatePathOptions"{% endif %}
                        {% if param.key not in (credential_keys or []) %}required{% endif %}>
+                {% if param.suggest == 'brander_templates' %}
+                <datalist id="templatePathOptions">
+                    {% for option in template_path_options %}<option value="{{ option }}">{% endfor %}
+                </datalist>
+                <small class="form-text">legacy, a template or set file in the assets folder, or store:&lt;name&gt; for a template uploaded under Extras, Brander templates.</small>
+                {% endif %}
             </div>
             {% endfor %}
             {% endif %}

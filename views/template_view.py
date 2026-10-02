@@ -47,7 +47,7 @@ from flask import (
 from markupsafe import escape
 from werkzeug.utils import secure_filename
 
-from bin import data_store, logger
+from bin import brander_store, data_store, logger
 from bin.data_store import get_jawa_address, get_webhook_schemas
 from bin.tokens import get_token, validate_token
 from bin.view_modifiers import response
@@ -693,6 +693,23 @@ def download_script(slug: str) -> Union[Response, str]:
     )
 
 
+BRANDER_ASSETS_DIR = os.path.join(BASE_DIR, "data", "workflows", "assets", "brander")
+
+
+def _template_path_options() -> List[str]:
+    """Suggestions for Brander's template setting: legacy, the template and
+    set files shipped in its assets folder, and this tenant's stored
+    templates (store:<slug>)."""
+    shipped = sorted(
+        name for name in os.listdir(BRANDER_ASSETS_DIR) if name.endswith(".json")
+    ) if os.path.isdir(BRANDER_ASSETS_DIR) else []
+    stored = [
+        f"store:{entry['slug']}"
+        for entry in brander_store.list_templates(session.get("url", ""))
+    ]
+    return ["legacy"] + stored + shipped
+
+
 def _enable_selfserve(workflow: Dict[str, Any], credentials: list):
     """Enable a self-serve template: substitute config, write the
     script, build the service record through the self-serve handler
@@ -825,6 +842,7 @@ def enable_template(slug: str) -> Union[Response, str]:
             # silently discarded by substitute_params' credential-first
             # precedence.
             credential_supplies=_credential_supplies(credentials),
+            template_path_options=_template_path_options(),
         )
 
     # POST: enable the template

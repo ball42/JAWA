@@ -163,6 +163,9 @@ def register_blueprints() -> None:
 
     app.register_blueprint(search_view.blueprint)
     # Webhook event reference (read-only docs)
+    from views import brander_view
+
+    app.register_blueprint(brander_view.blueprint)
     from views import reference_view
 
     app.register_blueprint(reference_view.blueprint)
