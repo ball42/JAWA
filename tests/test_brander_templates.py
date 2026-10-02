@@ -627,3 +627,58 @@ def test_impossible_budget_exits_34(jamf, tmp_path):
     module.ASSETS_DIR = str(assets)
     assert run(module) == 34
     assert jamf.commands == []
+
+
+# --- role variants: the role comes from the extension attribute the template names
+
+
+ROLE_TEMPLATE = {
+    "schema_version": 1,
+    "canvas": {"width": 120, "height": 240},
+    "background": {"color": "#000000"},
+    "roles": {
+        "attribute": "Jamf Setup Role",
+        "variants": {"nursing": {"background": {"color": "#0B6E4F"}}},
+        "empty": {"background": {"color": "#FFFFFF"}},
+        "default": {"background": {"color": "#3C6AA7"}},
+    },
+    "layers": [],
+}
+
+
+def with_eas(record, **eas):
+    record["extension_attributes"] = [
+        {"id": i, "name": name, "value": value} for i, (name, value) in enumerate(eas.items())
+    ]
+    return record
+
+
+def test_role_comes_only_from_the_named_attribute(jamf):
+    module = load_brander()
+    record = with_eas(device_record(), **{"Jamf Setup Role": " Nursing ", "Secret EA": "x"})
+    values = module.build_values(record, ROLE_TEMPLATE)
+    assert values["role"] == "Nursing"
+    assert "Secret EA" not in str(values) and "x" not in values.values()
+
+
+def test_no_roles_block_means_no_role_value(jamf):
+    module = load_brander()
+    record = with_eas(device_record(), **{"Jamf Setup Role": "Nursing"})
+    assert "role" not in module.build_values(record, basic_template())
+
+
+@pytest.mark.parametrize(
+    "eas, colour",
+    [
+        ({"Jamf Setup Role": "Nursing"}, (0x0B, 0x6E, 0x4F)),
+        ({"Jamf Setup Role": "Pharmacist"}, (0x3C, 0x6A, 0xA7)),
+        ({"Jamf Setup Role": ""}, (255, 255, 255)),
+        ({}, (255, 255, 255)),
+    ],
+)
+def test_brander_renders_the_role_variant(jamf, tmp_path, eas, colour):
+    with_eas(jamf.device, **eas)
+    module = load_brander(template_path=write_template(tmp_path, ROLE_TEMPLATE))
+    assert run(module) == 0
+    with Image.open(io.BytesIO(jamf.sent_image())) as img:
+        assert img.convert("RGB").getpixel((5, 5)) == colour

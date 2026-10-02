@@ -36,6 +36,10 @@ device receives.
   `{{device_name}}`, `{{serial_number}}`, `{{asset_tag}}`, `{{jss_id}}` and
   `{{location.building}}`. Anything else renders empty. Nothing from the
   request that triggered Brander is ever printed.
+- A template with **role variants** (designed in EWOK) names an extension
+  attribute, such as "Jamf Setup Role". Brander reads that one attribute from
+  the verified record and passes it as the role, so each role can have its own
+  background and wording. No other extension attribute is read.
 - Rendering stops after 20 seconds (exit 33). The image is sent as PNG, or as
   JPEG when the PNG is over the "Largest wallpaper" setting (default 1500 KB);
   exit 34 if even JPEG is too large.
