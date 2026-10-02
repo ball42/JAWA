@@ -184,6 +184,7 @@ def test_brander_script_generates_an_image_without_a_font_file(tmp_path):
         .replace("__JAWA_EA_ID__", "0")
         .replace("__JAWA_WALLPAPER_SETTING__", "3")
         .replace("__JAWA_MAX_KB__", "1500")
+        .replace('"__JAWA_ALLOW_PERSON_FIELDS__"', '"no"')
         # font_path is a required field at enable time, so the deployed
         # script never carries the bare token; "none" is the sentinel
         # value load_font() treats as the built-in font.

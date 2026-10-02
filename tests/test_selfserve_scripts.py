@@ -32,6 +32,7 @@ def _load_module(basename):
         source.replace("__JAWA_EA_ID__", "0")
         .replace("__JAWA_WALLPAPER_SETTING__", "3")
         .replace("__JAWA_MAX_KB__", "1500")
+        .replace('"__JAWA_ALLOW_PERSON_FIELDS__"', '"no"')
     )
     spec = importlib.util.spec_from_loader(basename, loader=None)
     module = importlib.util.module_from_spec(spec)

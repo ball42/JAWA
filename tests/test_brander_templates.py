@@ -44,6 +44,7 @@ def load_brander(script_path=SCRIPT, template_path="legacy", max_kb=1500):
         '"__JAWA_FONT_PATH__"': repr("none"),
         '"__JAWA_TEMPLATE_PATH__"': repr(template_path),
         "__JAWA_MAX_KB__": str(max_kb),
+        '"__JAWA_ALLOW_PERSON_FIELDS__"': repr("no"),
     }
     for token, value in tokens.items():
         assert token in source, token
@@ -748,3 +749,57 @@ def test_legacy_send_says_legacy(jamf, capsys):
     assert run(load_brander()) == 0
     assert "Device 42: wallpaper set (legacy layout, null.png)" in capsys.readouterr().out
 
+
+
+# --- M3-2: personal fields need the template and the admin (ADR-0013) --------
+
+PERSON_TEMPLATE = {
+    "schema_version": 1,
+    "canvas": {"width": 300, "height": 600},
+    "background": {"color": "#000000"},
+    "person_fields": True,
+    "layers": [
+        {"type": "text", "text": "{{user.real_name}}", "size": 0.05,
+         "box": {"x": 0.05, "y": 0.4, "w": 0.9, "h": 0.1}},
+    ],
+}
+
+
+def load_with_people(allow, **kw):
+    module = load_brander(**kw)
+    module.ALLOW_PERSON_FIELDS = allow
+    return module
+
+
+@pytest.mark.parametrize(
+    "allow, opted_in, expected",
+    [
+        ("yes", True, {"real_name": "Jackie Peyton", "username": "nurse.jackie",
+                       "email": "jackie@example.org"}),
+        ("no", True, None),
+        ("yes", False, None),
+        ("no", False, None),
+    ],
+)
+def test_user_fields_need_both_locks(jamf, allow, opted_in, expected):
+    module = load_with_people(allow)
+    template = dict(PERSON_TEMPLATE, person_fields=opted_in)
+    values = module.build_values(device_record(), template)
+    assert values.get("user") == expected
+
+
+def test_withheld_person_fields_render_empty_and_say_why(jamf, tmp_path, capsys):
+    module = load_with_people("no", template_path=write_template(tmp_path, PERSON_TEMPLATE))
+    assert run(module) == 0
+    assert "personal fields withheld" in capsys.readouterr().out
+    allowed = load_with_people("yes", template_path=write_template(tmp_path, PERSON_TEMPLATE))
+    blank = jamf.sent_image()
+    jamf.commands.clear()
+    assert run(allowed) == 0
+    assert jamf.sent_image() != blank
+
+
+@pytest.mark.parametrize("setting", ["yes", "Yes", " YES ", "true"])
+def test_allow_setting_accepts_yes(setting):
+    module = load_with_people(setting)
+    assert module.person_fields_allowed() is (setting.strip().lower() == "yes")

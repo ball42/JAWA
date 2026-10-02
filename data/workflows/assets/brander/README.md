@@ -40,6 +40,10 @@ device receives.
   attribute, such as "Jamf Setup Role". Brander reads that one attribute from
   the verified record and passes it as the role, so each role can have its own
   background and wording. No other extension attribute is read.
+- **Personal fields** (`{{user.real_name}}`, `{{user.username}}`,
+  `{{user.email}}`) print only when the template sets `person_fields: true`
+  *and* this Brander's "Allow personal fields" setting is `yes` (default `no`).
+  Otherwise they render empty. They are never allowed in QR codes.
 - Rendering stops after 20 seconds (exit 33). The image is sent as PNG, or as
   JPEG when the PNG is over the "Largest wallpaper" setting (default 1500 KB);
   exit 34 if even JPEG is too large.

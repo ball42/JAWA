@@ -420,6 +420,14 @@
                 "type": "text"
             },
             {
+                "key": "allow_person_fields",
+                "label": "Allow personal fields (yes or no): lets a template that asks for them print the user's name, username and email",
+                "placeholder": "no",
+                "default": "no",
+                "token": "\"__JAWA_ALLOW_PERSON_FIELDS__\"",
+                "type": "text"
+            },
+            {
                 "key": "max_kb",
                 "label": "Largest wallpaper to send, in KB (larger images are sent as JPEG)",
                 "placeholder": "1500",

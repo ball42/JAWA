@@ -121,6 +121,7 @@ ASSETS_DIR = "__JAWA_ASSETS_DIR__"
 FONT_PATH = "__JAWA_FONT_PATH__"  # "none" or blank = Pillow's built-in font
 TEMPLATE_PATH = "__JAWA_TEMPLATE_PATH__"  # "legacy" = the original layout
 MAX_KB = __JAWA_MAX_KB__  # noqa: F821 -- largest image sent, in KB
+ALLOW_PERSON_FIELDS = "__JAWA_ALLOW_PERSON_FIELDS__"  # "yes" to allow user.*
 
 RENDER_TIMEOUT = 20  # seconds; templates are untrusted input
 MAX_TEMPLATE_BYTES = 256 * 1024
@@ -412,11 +413,17 @@ def resolve_template(path, device):
     return template, os.path.basename(chosen), digest
 
 
+def person_fields_allowed():
+    return ALLOW_PERSON_FIELDS.strip().lower() == "yes"
+
+
 def build_values(device, template=None):
     """The only device data a template can print: fields of the
     UDID-verified record, never anything from the request. A template
     with role variants also gets `role`: the value of the one extension
-    attribute it names, and no other attribute."""
+    attribute it names, and no other attribute. Personal fields (user.*)
+    need both the template's person_fields flag and the admin's
+    "Allow personal fields" setting (ADR-0013)."""
     general = device.get("general", {})
     location = device.get("location", {})
     values = {
@@ -426,6 +433,16 @@ def build_values(device, template=None):
         "jss_id": general.get("id", ""),
         "location": {"building": location.get("building", "")},
     }
+    if (template or {}).get("person_fields") is True:
+        if person_fields_allowed():
+            values["user"] = {
+                "real_name": location.get("real_name", ""),
+                "username": location.get("username", ""),
+                "email": location.get("email_address", ""),
+            }
+        else:
+            print("Template asks for personal fields; personal fields withheld "
+                  "(Allow personal fields is not yes for this Brander).")
     attribute = ((template or {}).get("roles") or {}).get("attribute")
     if attribute:
         for ea in device.get("extension_attributes", []):
