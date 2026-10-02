@@ -16,7 +16,9 @@ an allowlist of the verified record's fields. With none, or "legacy",
 the original layout is drawn exactly as before.
 
 Exit codes: 0 set; 12 bad payload; 20 UDID mismatch; 21 device not
-found; 24 wallpaper command refused; 30 template missing or invalid;
+found; 22 Jamf refused the device lookup; 24 wallpaper command refused;
+25 device not supervised; 26 device is not iOS or iPadOS; 30 template
+missing or invalid;
 31 renderer missing, edited or on an unsupported Pillow; 32 template
 failed to render; 33 render timed out; 34 wallpaper over the size
 budget; 42 Brander EA is Off.
@@ -131,6 +133,15 @@ def load_font(size):
     return ImageFont.load_default(size=size)
 
 
+def jamf_error(response):
+    """A Jamf error for the log: the status and at most 200 characters of
+    the body on one line, never a whole HTML page or echoed request."""
+    if response is None:
+        return "no response"
+    body = " ".join(str(getattr(response, "text", "") or "").split())
+    return f"HTTP {response.status_code}" + (f": {body[:200]}" if body else "")
+
+
 def fetch_verified_device(jss_id, udid):
     """Classic mobile device record, only if the UDID matches."""
     try:
@@ -139,13 +150,30 @@ def fetch_verified_device(jss_id, udid):
         if err.response is not None and err.response.status_code == 404:
             print(f"Device {jss_id} not found in Jamf Pro.")
             sys.exit(21)
-        raise
+        print(f"Jamf Pro refused the device lookup: {jamf_error(err.response)}")
+        sys.exit(22)
     device = record.get("mobile_device", {})
     actual = str(device.get("general", {}).get("udid", "")).strip().lower()
     if not actual or actual != str(udid).strip().lower():
         print(f"UDID mismatch for device {jss_id}; refusing to brand.")
         sys.exit(20)
     return device
+
+
+WALLPAPER_PLATFORMS = ("iOS", "iPadOS")
+
+
+def preflight(device, jss_id):
+    """Only supervised iOS and iPadOS devices accept the Wallpaper command;
+    stop before rendering anything for any other device."""
+    general = device.get("general", {})
+    if general.get("supervised") is not True:
+        print(f"Device {jss_id} is not supervised; the Wallpaper command needs supervision.")
+        sys.exit(25)
+    if general.get("os_type") not in WALLPAPER_PLATFORMS:
+        print(f"Device {jss_id} runs {general.get('os_type') or 'an unknown OS'}; "
+              "wallpapers apply to iOS and iPadOS only.")
+        sys.exit(26)
 
 
 def find_role(device):
@@ -335,7 +363,7 @@ def load_template(path, base=None):
     except ValueError as err:
         print(f"Template {path} is not valid JSON: {err}.")
         sys.exit(30)
-    return template
+    return template, hashlib.sha256(raw).hexdigest()
 
 
 def device_family(model_identifier):
@@ -358,9 +386,9 @@ def resolve_template(path, device):
     ("ipad", "iphone") or "default", tried in that order against the
     verified record. Set entries are relative to the set file.
     """
-    data = load_template(path)
+    data, digest = load_template(path)
     if not _is_template_set(data):
-        return data, os.path.basename(path)
+        return data, os.path.basename(path), digest
     templates = data["templates"]
     if not isinstance(templates, dict) or not all(
         isinstance(v, str) for v in templates.values()
@@ -377,11 +405,11 @@ def resolve_template(path, device):
               "and no default.")
         sys.exit(30)
     full = path if os.path.isabs(path) else os.path.join(ASSETS_DIR, path)
-    template = load_template(chosen, base=os.path.dirname(full))
+    template, digest = load_template(chosen, base=os.path.dirname(full))
     if _is_template_set(template):
         print(f"Template set entry {chosen} is itself a set.")
         sys.exit(30)
-    return template, os.path.basename(chosen)
+    return template, os.path.basename(chosen), digest
 
 
 def build_values(device, template=None):
@@ -434,7 +462,7 @@ def template_wallpaper(path, device, max_bytes):
     call finishes before it fires; wallrender's canvas caps bound how
     long any one call can take."""
     renderer = load_renderer()
-    template, source = resolve_template(path, device)
+    template, source, digest = resolve_template(path, device)
     problems = renderer.validate(template)
     if problems:
         print("Template is invalid: " + "; ".join(problems[:5]))
@@ -447,7 +475,7 @@ def template_wallpaper(path, device, max_bytes):
             ),
             RENDER_TIMEOUT,
         )
-        return image, source
+        return image, f"{source}, sha256 {digest[:12]}"
     except renderer.TemplateError as err:
         print(f"Template failed to render: {err}")
         sys.exit(32)
@@ -492,7 +520,7 @@ def set_wallpaper(image_bytes, jss_id):
         timeout=60,
     )
     if resp.status_code >= 400:
-        print(f"Wallpaper command refused: HTTP {resp.status_code}")
+        print(f"Wallpaper command refused: {jamf_error(resp)}")
         sys.exit(24)
 
 
@@ -507,13 +535,14 @@ def main():
 
     device = fetch_verified_device(jss_id, udid)
     basename, role = find_role(device)
+    preflight(device, jss_id)
     template = TEMPLATE_PATH.strip()
     if template and template.lower() != "legacy":
         image, source = template_wallpaper(template, device, MAX_KB * 1024)
     else:
         img = compose_legacy(ASSETS_DIR, basename, role, device)
         image = encode_within_budget(img, MAX_KB * 1024)
-        source = f"{basename}.png"
+        source = f"legacy layout, {basename}.png"
     set_wallpaper(image, jss_id)
     print(f"Device {jss_id}: wallpaper set ({source}).")
 
