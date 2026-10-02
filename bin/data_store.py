@@ -28,6 +28,7 @@
 
 import json
 import os
+import tempfile
 import threading
 from typing import Any, Dict, List, Optional
 
@@ -72,8 +73,20 @@ def _read_json(filepath: str, default: Any = None) -> Any:
 
 
 def _write_json(filepath: str, data: Any) -> None:
-    with open(filepath, "w") as f:
-        json.dump(data, f, indent=4)
+    """Write via a temp file and rename, so a crash or full disk never
+    leaves a truncated file (which _read_json would silently reset)."""
+    folder = os.path.dirname(os.path.abspath(filepath))
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=4)
+        if os.path.exists(filepath):
+            os.chmod(tmp, os.stat(filepath).st_mode & 0o777)
+        os.replace(tmp, filepath)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
 
 
 # --- Webhooks ---

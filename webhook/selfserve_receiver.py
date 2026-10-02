@@ -38,6 +38,7 @@ Self-serve section of README.md for the URL and payload contract.
 
 import hmac
 import re
+import threading
 import time
 from urllib.parse import unquote_plus
 from typing import Any, Dict, Mapping, Optional, Tuple
@@ -217,6 +218,35 @@ def _cooldown_minutes(service: Dict[str, Any]) -> int:
         return 0
 
 
+# Unauthenticated confirms: each service token is shared by every web
+# clip, so cap how often one address can make JAWA run the script and
+# call Jamf Pro (per service, sliding window, per process).
+RATE_LIMIT = 10
+RATE_WINDOW = 60.0
+_rate_lock = threading.Lock()
+_recent: Dict[Tuple[str, str], list] = {}
+
+
+def reset_rate_limits() -> None:
+    with _rate_lock:
+        _recent.clear()
+
+
+def _over_rate_limit(service_name: str, address: str) -> bool:
+    now = _now()
+    with _rate_lock:
+        times = [t for t in _recent.get((service_name, address), []) if now - t < RATE_WINDOW]
+        if len(times) >= RATE_LIMIT:
+            _recent[(service_name, address)] = times
+            return True
+        times.append(now)
+        _recent[(service_name, address)] = times
+        if len(_recent) > 10000:  # bound memory: drop the stalest entries
+            for key in sorted(_recent, key=lambda k: max(_recent[k]))[:5000]:
+                del _recent[key]
+    return False
+
+
 def cooldown_message(seconds: int) -> str:
     if seconds < 60:
         wait = "under a minute"
@@ -259,6 +289,12 @@ def service_run(service_name: str):
     except SelfServeRequestError as err:
         return err.message, err.status
 
+    if _over_rate_limit(service["name"], _remote_address()):
+        logthis.warning(
+            f"429 - self-serve {service['name']}: too many confirms from "
+            f"{_remote_address()}."
+        )
+        return "Too many requests. Wait a minute and try again.", 429
     payload = build_selfserve_payload(
         service, jss_id, udid, params, _remote_address()
     )

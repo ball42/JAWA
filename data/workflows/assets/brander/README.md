@@ -34,6 +34,8 @@ device receives.
   exported from EWOK) are used by setting "Wallpaper template" to
   `store:<name>`. Brander renders that template's **active** version with its
   own assets, so activating a new version takes effect on the next tap.
+- A template may say which screen it is for (`"screen": "lock"`, `"home"` or
+  `"both"`). That choice wins over the Brander's "wallpaper target" setting.
 - Image layers name an asset id; Brander loads `<id>.png`, `.jpg` or `.jpeg`
   from this directory and nowhere else.
 - A template can print only these fields of the UDID-verified Jamf record:

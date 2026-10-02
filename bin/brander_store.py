@@ -67,8 +67,9 @@ def tenant_key(server_url: str) -> str:
     """A folder name for a Jamf Pro tenant: its host (and port)."""
     parsed = urlparse(server_url or "")
     host = (parsed.hostname or "").lower()
-    if parsed.port:
-        host = f"{host}-{parsed.port}"
+    port = parsed.port
+    if port and port != {"https": 443, "http": 80}.get(parsed.scheme.lower()):
+        host = f"{host}-{port}"
     host = re.sub(r"[^a-z0-9.-]", "-", host).strip(".-")
     return host or "default"
 
@@ -129,7 +130,10 @@ def validate_package(raw: bytes) -> Tuple[Optional[Dict[str, Any]], List[str]]:
         problems.append("the package needs a name with letters or digits")
     wallrender = _wallrender()
     template = package.get("template")
-    problems += wallrender.validate(template)
+    try:
+        problems += wallrender.validate(template)
+    except Exception as err:  # noqa: BLE001 -- crafted input must not crash the upload
+        problems.append(f"the template could not be validated ({type(err).__name__})")
     assets = package.get("assets")
     if not isinstance(assets, dict):
         return None, problems + ["assets must be an object of id: base64 image"]
@@ -154,12 +158,35 @@ def _slug_dir(tenant_url: str, slug: str) -> str:
     return os.path.join(STORE_DIR, tenant_key(tenant_url), slug)
 
 
+def _version_dirs(slug_dir: str) -> List[int]:
+    found = []
+    for name in os.listdir(slug_dir) if os.path.isdir(slug_dir) else []:
+        if name.startswith("v") and name[1:].isdigit() and os.path.isdir(os.path.join(slug_dir, name)):
+            found.append(int(name[1:]))
+    return sorted(found)
+
+
 def _read_index(slug_dir: str) -> Optional[Dict[str, Any]]:
+    """The slug's index; if it is missing or corrupt but versions exist on
+    disk, an index rebuilt from them (the audit history is lost, and the
+    newest version is marked active)."""
     try:
         with open(os.path.join(slug_dir, "index.json"), encoding="utf-8") as handle:
-            return json.load(handle)
+            index = json.load(handle)
+        if isinstance(index, dict) and isinstance(index.get("versions"), list):
+            return index
     except (OSError, ValueError):
+        pass
+    versions = _version_dirs(slug_dir)
+    if not versions:
         return None
+    slug = os.path.basename(slug_dir)
+    return {
+        "slug": slug, "name": slug, "active": versions[-1], "rebuilt": True,
+        "versions": [{"version": v, "sha256": "", "uploaded_by": "unknown (index rebuilt)",
+                      "uploaded_at": 0} for v in versions],
+        "activations": [],
+    }
 
 
 def _write_index(slug_dir: str, index: Dict[str, Any]) -> None:
@@ -182,7 +209,8 @@ def save_version(tenant_url: str, raw: bytes, user: str, now: Optional[float] = 
         os.makedirs(slug_dir, exist_ok=True)
         index = _read_index(slug_dir) or {"slug": slug, "name": package["name"], "active": None,
                                           "versions": [], "activations": []}
-        version = len(index["versions"]) + 1
+        # Never reuse a number: the index and the folders on disk must agree.
+        version = max([v["version"] for v in index["versions"]] + _version_dirs(slug_dir) + [0]) + 1
         # Build the version in a temp folder, then rename it into place,
         # so a version folder is never half-written.
         staging = tempfile.mkdtemp(dir=slug_dir, prefix=".staging-")

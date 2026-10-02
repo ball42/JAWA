@@ -44,7 +44,10 @@ def timestamp_to_text(seconds: int) -> str:
 def used_by() -> dict:
     """slug -> names of the self-serve Branders whose template is store:<slug>."""
     found: dict = {}
+    tenant = brander_store.tenant_key(session.get("url", ""))
     for entry in get_webhooks_by_tag("selfserve"):
+        if brander_store.tenant_key(entry.get("url", "")) != tenant:
+            continue  # another tenant's automation: never shown here
         script = entry.get("script", "")
         if brander_settings.is_brander_script(script):
             path = str(brander_settings.read_settings(script).get("template_path") or "")
@@ -146,9 +149,13 @@ def _template_file(choice: str, device: Dict[str, Any]) -> Tuple[Optional[str], 
         data = json.load(handle)
     if isinstance(data, dict) and "templates" in data and "schema_version" not in data:
         entry = brander_values.set_entry(data, device)
-        if not entry or os.path.basename(entry) != entry:
-            return None, f"{choice} has no entry for this device"
-        return os.path.join(BRANDER_ASSETS_DIR, entry), f"{choice} picked {entry}"
+        if not isinstance(entry, str) or not entry:
+            return None, f"{choice} has no usable entry for this device"
+        # Same rule as the script: entries are relative to the set file.
+        resolved = os.path.realpath(os.path.join(BRANDER_ASSETS_DIR, entry))
+        if not resolved.startswith(os.path.realpath(BRANDER_ASSETS_DIR) + os.sep):
+            return None, f"{choice} points outside the Brander assets folder"
+        return resolved, f"{choice} picked {entry}"
     return path, choice
 
 
@@ -166,6 +173,21 @@ def _folder_assets(folders: List[str]):
         raise KeyError(asset_id)
 
     return resolve
+
+
+def _device_fit(wallrender, template, size, model_identifier) -> Dict[str, Any]:
+    """Layers cut off or covered on the device's family of screens (every
+    iPhone or iPad profile), for the template's screen (both: lock)."""
+    from wallrender import devices
+
+    family = brander_values.device_family(model_identifier)
+    profiles = [p for p in devices.device_profiles() if p["family"] == family] or devices.device_profiles()
+    screen = "home" if template.get("screen") == "home" else "lock"
+    return {
+        "devices": [p["name"] for p in profiles],
+        "screen": screen,
+        "warnings": devices.fit_warnings(template, size, [p["id"] for p in profiles], screen),
+    }
 
 
 def _preview_page(status=200, **context) -> tuple:
@@ -190,18 +212,36 @@ def preview() -> Union[Response, str, tuple]:
         return _preview_page(400, form=form, problems=["Choose a template from the list."])
     if not jss_text.isdigit():
         return _preview_page(400, form=form, problems=["Enter the device's Jamf Pro ID (a number)."])
-    resp = _jamf_get(f"mobiledevices/id/{int(jss_text)}")
+    try:
+        resp = _jamf_get(f"mobiledevices/id/{int(jss_text)}")
+    except requests.RequestException as err:
+        return _preview_page(502, form=form, problems=[f"Could not reach Jamf Pro ({type(err).__name__})."])
     if resp.status_code == 404:
         return _preview_page(404, form=form, problems=[f"No mobile device with Jamf ID {jss_text}."])
     if resp.status_code >= 400:
         return _preview_page(502, form=form, problems=[f"Jamf Pro refused the lookup (HTTP {resp.status_code})."])
-    device = resp.json().get("mobile_device", {})
-    path, chosen = _template_file(choice, device)
+    try:
+        device = resp.json().get("mobile_device", {})
+    except (ValueError, AttributeError):
+        return _preview_page(502, form=form, problems=["Jamf Pro's device lookup did not return JSON."])
+    try:
+        path, chosen = _template_file(choice, device)
+    except (OSError, ValueError):
+        return _preview_page(400, form=form, problems=[f"{choice} could not be read."])
     if not path or not os.path.isfile(path):
         return _preview_page(400, form=form, problems=[f"No template to render: {chosen}."])
-    with open(path, encoding="utf-8") as handle:
-        template = json.load(handle)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            template = json.load(handle)
+    except (OSError, ValueError, RecursionError):
+        return _preview_page(400, form=form, problems=[f"{chosen} is not valid JSON."])
     wallrender = brander_store._wallrender()
+    try:
+        problems = wallrender.validate(template)
+    except Exception as err:  # noqa: BLE001 -- a crafted template must not 500 the page
+        problems = [f"validation failed ({type(err).__name__})"]
+    if problems:
+        return _preview_page(422, form=form, problems=problems)
     values = brander_values.build_values(device, template, allow)
     assets = _folder_assets([os.path.dirname(path), BRANDER_ASSETS_DIR])
     try:
@@ -212,9 +252,10 @@ def preview() -> Union[Response, str, tuple]:
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
     general = device.get("general", {})
+    fit = _device_fit(wallrender, template, image.size, general.get("model_identifier", ""))
     logthis.info(f"{session.get('username')} previewed {chosen} for device {jss_text} (nothing sent).")
     return _preview_page(
-        form=form, chosen=chosen, warnings=warnings,
+        form=form, chosen=chosen, warnings=warnings, fit=fit,
         image=base64.b64encode(buffer.getvalue()).decode("ascii"),
         size=image.size,
         device={"name": general.get("device_name", ""), "model": general.get("model_identifier", ""),
@@ -227,10 +268,13 @@ def preview() -> Union[Response, str, tuple]:
 def ea_names() -> Union[Response, tuple]:
     """The tenant's mobile device extension attribute names (names only,
     never values) for EWOK's role attribute picker."""
-    resp = _jamf_get("mobiledeviceextensionattributes")
-    if resp.status_code >= 400:
-        return {"error": f"Jamf Pro refused the lookup (HTTP {resp.status_code})."}, 502
-    items = resp.json().get("mobile_device_extension_attributes", [])
+    try:
+        resp = _jamf_get("mobiledeviceextensionattributes")
+        if resp.status_code >= 400:
+            return {"error": f"Jamf Pro refused the lookup (HTTP {resp.status_code})."}, 502
+        items = resp.json().get("mobile_device_extension_attributes", [])
+    except (requests.RequestException, ValueError, AttributeError) as err:
+        return {"error": f"Could not read the attribute names from Jamf Pro ({type(err).__name__})."}, 502
     names = sorted({str(item.get("name", "")) for item in items if item.get("name")})
     payload = json.dumps({"kind": "jamf-ea-names", "format": 1, "names": names}, indent=1)
     return send_file(io.BytesIO(payload.encode()), mimetype="application/json",

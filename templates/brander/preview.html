@@ -63,6 +63,13 @@
                 <dt>Would Brander send it?</dt>
                 <dd>{% if device.supervised is sameas true and device.os_type in ('iOS', 'iPadOS') %}Yes: supervised {{ device.os_type }}.{% else %}No: Brander only sends to supervised iOS and iPadOS devices.{% endif %}</dd>
             </dl>
+            <h2 class="h6">Fit on {{ fit.screen }} screens</h2>
+            <p class="small">Checked on: {{ fit.devices | join(", ") }}.</p>
+            {% if fit.warnings %}
+            <ul class="brander-warnings">{% for w in fit.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+            {% else %}
+            <p>Fits every one of them.</p>
+            {% endif %}
             {% if warnings %}
             <h2 class="h6">Warnings</h2>
             <ul class="brander-warnings">{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
