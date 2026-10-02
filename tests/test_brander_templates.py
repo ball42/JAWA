@@ -83,6 +83,7 @@ def device_record(**general):
             "os_type": "iPadOS",
             "os_version": "18.0",
             "phone_number": "555-0100",
+            "supervised": True,
         },
         "location": {
             "building": "North Campus",
@@ -98,9 +99,10 @@ def device_record(**general):
 
 
 class FakeResponse:
-    def __init__(self, status, payload=None):
+    def __init__(self, status, payload=None, text=""):
         self.status_code = status
         self._payload = payload if payload is not None else {}
+        self.text = text
 
     def json(self):
         return self._payload
@@ -114,10 +116,14 @@ class FakeJamf:
     def __init__(self):
         self.device = device_record()
         self.wallpaper_status = 201
+        self.lookup_status = 200
+        self.error_body = ""
         self.commands = []
 
     def request(self, method, url, **kwargs):
         if method == "GET" and url == f"{SERVER}/JSSResource/mobiledevices/id/42":
+            if self.lookup_status != 200:
+                return FakeResponse(self.lookup_status, text=self.error_body)
             return FakeResponse(200, {"mobile_device": self.device})
         if method == "GET" and url.startswith(
             f"{SERVER}/JSSResource/mobiledevices/id/"
@@ -132,7 +138,7 @@ class FakeJamf:
         if url == WALLPAPER_URL:
             assert kwargs["headers"]["Authorization"] == "Bearer t"
             self.commands.append(kwargs["data"])
-            return FakeResponse(self.wallpaper_status)
+            return FakeResponse(self.wallpaper_status, text=self.error_body)
         raise AssertionError(f"unexpected Jamf POST: {url}")
 
     def sent_image(self):
@@ -326,7 +332,7 @@ def test_set_logs_the_template_it_chose(jamf, tmp_path, capsys):
     path = write_set(tmp_path, {"iphone": "phone.json"}, {"phone.json": (100, 200)})
     jamf.device["general"]["model_identifier"] = "iPhone14,2"
     run(load_brander(template_path=path))
-    assert "wallpaper set (phone.json)" in capsys.readouterr().out
+    assert "wallpaper set (phone.json, sha256 " in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -682,3 +688,63 @@ def test_brander_renders_the_role_variant(jamf, tmp_path, eas, colour):
     assert run(module) == 0
     with Image.open(io.BytesIO(jamf.sent_image())) as img:
         assert img.convert("RGB").getpixel((5, 5)) == colour
+
+
+# --- M3-1: delivery preflight -----------------------------------------------
+
+
+@pytest.mark.parametrize("supervised", [False, None])
+def test_unsupervised_device_exits_25_before_rendering(jamf, supervised):
+    if supervised is None:
+        del jamf.device["general"]["supervised"]
+    else:
+        jamf.device["general"]["supervised"] = supervised
+    assert run(load_brander()) == 25
+    assert jamf.commands == []
+
+
+@pytest.mark.parametrize("os_type", ["tvOS", "macOS", ""])
+def test_non_ios_device_exits_26(jamf, os_type):
+    jamf.device["general"]["os_type"] = os_type
+    assert run(load_brander()) == 26
+    assert jamf.commands == []
+
+
+@pytest.mark.parametrize("os_type", ["iOS", "iPadOS"])
+def test_ios_and_ipados_pass_preflight(jamf, os_type):
+    jamf.device["general"]["os_type"] = os_type
+    assert run(load_brander()) == 0
+
+
+def test_failed_device_lookup_exits_22_with_a_trimmed_message(jamf, capsys):
+    jamf.lookup_status = 500
+    jamf.error_body = "<html>" + "x" * 5000 + "</html>"
+    assert run(load_brander()) == 22
+    out = capsys.readouterr().out
+    assert "HTTP 500" in out
+    assert len(out) < 600
+
+
+def test_refused_wallpaper_logs_a_trimmed_jamf_body(jamf, capsys):
+    jamf.wallpaper_status = 400
+    jamf.error_body = "Device is not supervised\n" + "y" * 5000
+    assert run(load_brander()) == 24
+    out = capsys.readouterr().out
+    assert "Device is not supervised" in out
+    assert len(out) < 600
+
+
+def test_each_send_logs_the_template_and_its_hash(jamf, tmp_path, capsys):
+    import hashlib
+
+    path = write_template(tmp_path, basic_template())
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
+    assert run(load_brander(template_path=path)) == 0
+    out = capsys.readouterr().out
+    assert f"Device 42: wallpaper set (template.json, sha256 {digest})" in out
+
+
+def test_legacy_send_says_legacy(jamf, capsys):
+    assert run(load_brander()) == 0
+    assert "Device 42: wallpaper set (legacy layout, null.png)" in capsys.readouterr().out
+
