@@ -30,6 +30,10 @@ device receives.
     the centre 75%, which stays visible in both portrait and landscape.
     iOS scales a wallpaper to fill the screen and crops the rest, so a
     portrait iPhone template loses its top and bottom on an iPad.
+- Templates uploaded to JAWA's **template store** (a `.brander.json` package
+  exported from EWOK) are used by setting "Wallpaper template" to
+  `store:<name>`. Brander renders that template's **active** version with its
+  own assets, so activating a new version takes effect on the next tap.
 - Image layers name an asset id; Brander loads `<id>.png`, `.jpg` or `.jpeg`
   from this directory and nowhere else.
 - A template can print only these fields of the UDID-verified Jamf record:
