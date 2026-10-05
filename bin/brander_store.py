@@ -269,3 +269,116 @@ def active_template_path(tenant_url: str, slug: str) -> Optional[str]:
         return None
     path = os.path.join(slug_dir, f"v{index['active']}", "template.json")
     return path if os.path.isfile(path) else None
+
+
+# --- Store sets: one Brander, a stored template per kind of device ---------
+#
+# A Brander's template setting is store:<name> for one stored template, or
+# a store set of space-separated key=name pairs:
+#
+#     store:iphone=front-desk ipad=ward-ipads iPad8,5=ipad-pro-12 default=front-desk
+#
+# Keys follow template set files: an exact model identifier, a family
+# ("iphone", "ipad"), or "default", tried in that order. The rule is
+# repeated in the Brander script (data/workflows/scripts/self_serve_brander.py),
+# and tests/test_brander_store_sets.py keeps the two in step.
+
+MAX_SET_ENTRIES = 20
+
+
+def store_set(spec: str) -> Optional[Dict[str, str]]:
+    """key -> slug for a store set; None when spec names one template.
+    spec is the text after "store:". Raises StoreError on a malformed set."""
+    spec = str(spec).strip()
+    if "=" not in spec:
+        return None
+    entries: Dict[str, str] = {}
+    problems = []
+    for part in spec.split():
+        key, sep, name = part.partition("=")
+        if not sep or not key or not slugify(name):
+            problems.append(f"{part!r} is not key=name")
+        elif key in entries:
+            problems.append(f"{key} is listed twice")
+        else:
+            entries[key] = slugify(name)
+    if len(entries) > MAX_SET_ENTRIES:
+        problems.append(f"a store set may have at most {MAX_SET_ENTRIES} entries")
+    if problems:
+        raise StoreError(problems)
+    return entries
+
+
+def store_slugs(setting: str) -> List[str]:
+    """Every stored template a Brander template setting names, or []."""
+    setting = str(setting or "").strip()
+    if not setting.startswith("store:"):
+        return []
+    spec = setting[len("store:"):]
+    try:
+        entries = store_set(spec)
+    except StoreError:
+        return []
+    if entries is None:
+        return [slug] if (slug := slugify(spec)) else []
+    return list(dict.fromkeys(entries.values()))
+
+
+def set_choice(entries: Dict[str, str], model_identifier: str) -> Optional[str]:
+    """The slug a store set picks for a device, or None."""
+    model = str(model_identifier or "")
+    match = re.match(r"[A-Za-z]+", model)
+    family = match.group(0).lower() if match else ""
+    for key in (model, family, "default"):
+        if key and key in entries:
+            return entries[key]
+    return None
+
+
+def load_version(tenant_url: str, slug: str, version: int) -> Optional[Dict[str, Any]]:
+    """A stored version's template, or None."""
+    path = os.path.join(_slug_dir(tenant_url, slugify(slug)), f"v{int(version)}", "template.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+FAMILIES = (("iphone", "iPhone"), ("ipad", "iPad"))
+LAYER_KINDS = {"text": "text", "qr": "QR code", "image": "image"}
+
+
+def _layer_names(template: Dict[str, Any], warning: str) -> str:
+    """'layer 1: cut off on X' -> 'Layer 2 (QR code): cut off on X'."""
+    match = re.match(r"layer (\d+): (.*)", warning)
+    if not match:
+        return warning
+    i = int(match.group(1))
+    layers = template.get("layers") or []
+    kind = layers[i].get("type") if i < len(layers) and isinstance(layers[i], dict) else None
+    label = f"Layer {i + 1}" + (f" ({LAYER_KINDS[kind]})" if kind in LAYER_KINDS else "")
+    return f"{label}: {match.group(2)}"
+
+
+def fit_summary(template: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Per family of devices, the layers each screen cuts off or covers:
+    [{"family": "iPad", "warnings": [...]}, ...]. Geometry only, no render."""
+    _wallrender()
+    from wallrender import devices
+    canvas = template.get("canvas") or {}
+    try:
+        size = (int(canvas["width"]), int(canvas["height"]))
+    except (KeyError, TypeError, ValueError):
+        return []
+    screen = "home" if template.get("screen") == "home" else "lock"
+    out = []
+    for family, label in FAMILIES:
+        ids = [p["id"] for p in devices.device_profiles() if p["family"] == family]
+        try:
+            warnings = [_layer_names(template, w)
+                        for w in devices.fit_warnings(template, size, ids, screen)]
+        except (KeyError, TypeError, ValueError):
+            warnings = ["the layout could not be checked"]
+        out.append({"family": label, "warnings": warnings})
+    return out

@@ -13,6 +13,8 @@ import re
 import tempfile
 from typing import Any, Dict, List
 
+from bin import brander_store
+
 # setting key -> variable name in the script
 SETTINGS = {
     "template_path": "TEMPLATE_PATH",
@@ -68,6 +70,13 @@ def _validated(updates: Dict[str, str]) -> Dict[str, str]:
         value = str(updates["template_path"]).strip()
         if not value or len(value) > 300 or any(c in value for c in "\r\n\0#"):
             problems.append("The template must be legacy, a file name or store:<name> (one line, at most 300 characters).")
+        elif value.startswith("store:") and "=" in value:
+            try:
+                brander_store.store_set(value[len("store:"):])
+            except brander_store.StoreError as err:
+                problems += [f"Store set: {p}." for p in err.problems]
+            else:
+                source["template_path"] = repr(value)
         else:
             source["template_path"] = repr(value)
     if "max_kb" in updates:

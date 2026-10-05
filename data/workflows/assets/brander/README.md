@@ -34,6 +34,12 @@ device receives.
   exported from EWOK) are used by setting "Wallpaper template" to
   `store:<name>`. Brander renders that template's **active** version with its
   own assets, so activating a new version takes effect on the next tap.
+- A **store set** sends each kind of device its own stored template:
+  `store:iphone=front-desk ipad=ward-ipads`. Pairs are separated by spaces;
+  keys are an exact model identifier (`iPad8,5`), a family (`iphone`,
+  `ipad`) or `default`, tried in that order, the same as a template set
+  file. The store page shows which layers each family's screens cut off or
+  cover, for the active version and for each upload.
 - A template may say which screen it is for (`"screen": "lock"`, `"home"` or
   `"both"`). That choice wins over the Brander's "wallpaper target" setting.
 - Image layers name an asset id; Brander loads `<id>.png`, `.jpg` or `.jpeg`
