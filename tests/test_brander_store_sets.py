@@ -179,3 +179,23 @@ def test_preview_lists_and_resolves_a_store_set(logged_in_client, jawa_env, tmp_
     monkeypatch.setattr(requests, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no POST")))
     body = logged_in_client.post("/brander/preview", data={"template": setting, "jss_id": "42"}).get_data(as_text=True)
     assert "picked store:ward-ipads" in body
+
+
+# --- wallrender 0.9.0: panel layers ---------------------------------------------
+
+
+def test_brander_renders_a_stored_template_with_a_panel(jamf, store_dir):  # noqa: F811
+    panelled = dict(PHONE, layers=[{"type": "panel", "color": "#000000", "opacity": 1,
+                                    "box": {"x": 0, "y": 0, "w": 1, "h": 0.5}}])
+    store.save_version(SERVER, package(name="Front desk", template=panelled, assets={}), "alice")
+    assert run(brander_with(store_dir, "store:front-desk")) == 0
+    with Image.open(io.BytesIO(jamf.sent_image())) as img:
+        rgb = img.convert("RGB")
+        assert rgb.getpixel((60, 20)) == (0, 0, 0)  # under the panel
+        assert rgb.getpixel((60, 260)) == (255, 255, 255)  # the white background
+
+
+def test_fit_summary_names_panel_layers():
+    panelled = dict(PHONE, layers=[{"type": "panel", "box": {"x": 0, "y": 0.9, "w": 1, "h": 0.1}}])
+    ipad = [f for f in store.fit_summary(panelled) if f["family"] == "iPad"][0]
+    assert any(w.startswith("Layer 1 (panel):") for w in ipad["warnings"])

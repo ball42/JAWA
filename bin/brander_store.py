@@ -346,7 +346,7 @@ def load_version(tenant_url: str, slug: str, version: int) -> Optional[Dict[str,
 
 
 FAMILIES = (("iphone", "iPhone"), ("ipad", "iPad"))
-LAYER_KINDS = {"text": "text", "qr": "QR code", "image": "image"}
+LAYER_KINDS = {"text": "text", "qr": "QR code", "image": "image", "panel": "panel"}
 
 
 def _layer_names(template: Dict[str, Any], warning: str) -> str:
