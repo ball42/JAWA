@@ -41,9 +41,9 @@ def timestamp_to_text(seconds: int) -> str:
     return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(seconds))
 
 
-def used_by() -> dict:
-    """slug -> names of the self-serve Branders whose template is store:<slug>."""
-    found: dict = {}
+def _brander_templates() -> List[Tuple[str, str]]:
+    """(name, template setting) for this tenant's self-serve Branders."""
+    found = []
     tenant = brander_store.tenant_key(session.get("url", ""))
     for entry in get_webhooks_by_tag("selfserve"):
         if brander_store.tenant_key(entry.get("url", "")) != tenant:
@@ -51,16 +51,34 @@ def used_by() -> dict:
         script = entry.get("script", "")
         if brander_settings.is_brander_script(script):
             path = str(brander_settings.read_settings(script).get("template_path") or "")
-            if path.startswith("store:"):
-                slug = brander_store.slugify(path[len("store:"):])
-                found.setdefault(slug, []).append(entry.get("name", ""))
+            found.append((entry.get("name", ""), path))
     return found
+
+
+def used_by() -> dict:
+    """slug -> names of the self-serve Branders whose template setting names
+    it, alone (store:<slug>) or in a store set."""
+    found: dict = {}
+    for name, path in _brander_templates():
+        for slug in brander_store.store_slugs(path):
+            found.setdefault(slug, []).append(name)
+    return found
+
+
+def _fit(slug: str, version: Any) -> List[Dict[str, Any]]:
+    """Which layers each family of devices cuts off or covers, for a stored
+    version; [] when it cannot be read."""
+    if not version:
+        return []
+    template = brander_store.load_version(session.get("url", ""), slug, version)
+    return brander_store.fit_summary(template) if isinstance(template, dict) else []
 
 
 def _page(status=200, **context) -> tuple:
     templates = brander_store.list_templates(session.get("url", ""))
+    fits = {t["slug"]: _fit(t["slug"], t.get("active")) for t in templates}
     return render_template("brander/templates.html", templates=templates,
-                           used_by=used_by(), **context), status
+                           used_by=used_by(), fits=fits, **context), status
 
 
 @blueprint.route("/brander/templates", methods=["GET"])
@@ -91,7 +109,8 @@ def upload() -> Union[Response, str, tuple]:
         f"{result['slug']} v{result['version']} (sha256 {result['sha256'][:12]})."
     )
     names = {t["slug"]: t["name"] for t in brander_store.list_templates(session.get("url", ""))}
-    return _page(uploaded=dict(result, name=names.get(result["slug"], result["slug"])))
+    return _page(uploaded=dict(result, name=names.get(result["slug"], result["slug"]),
+                               fit=_fit(result["slug"], result["version"])))
 
 
 @blueprint.route("/brander/templates/<slug>/activate", methods=["POST"])
@@ -136,14 +155,27 @@ def preview_choices() -> List[str]:
     shipped = sorted(
         name for name in os.listdir(BRANDER_ASSETS_DIR) if name.endswith(".json")
     ) if os.path.isdir(BRANDER_ASSETS_DIR) else []
-    return stored + shipped
+    sets = sorted({path.strip() for _, path in _brander_templates()
+                   if path.strip().startswith("store:") and "=" in path})
+    return stored + sets + shipped
 
 
 def _template_file(choice: str, device: Dict[str, Any]) -> Tuple[Optional[str], str]:
     """(path of the template to render, note on how it was chosen)."""
     if choice.startswith("store:"):
-        path = brander_store.active_template_path(session.get("url", ""), choice[len("store:"):])
-        return path, choice
+        spec = choice[len("store:"):]
+        try:
+            entries = brander_store.store_set(spec)
+        except brander_store.StoreError:
+            return None, f"{choice} is not a valid store set"
+        if entries is None:
+            return brander_store.active_template_path(session.get("url", ""), spec), choice
+        # Same rule as the script: model identifier, family, then default.
+        slug = brander_store.set_choice(entries, device.get("general", {}).get("model_identifier"))
+        if not slug:
+            return None, f"{choice} has no template for this device and no default"
+        return (brander_store.active_template_path(session.get("url", ""), slug),
+                f"{choice} picked store:{slug}")
     path = os.path.join(BRANDER_ASSETS_DIR, choice)
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)

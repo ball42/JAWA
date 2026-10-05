@@ -481,7 +481,8 @@ def render_template(renderer, template, values, folders=None):
     )
 
 
-# --- the template store (M3-3): template setting "store:<slug>" ---
+# --- the template store (M3-3): template setting "store:<slug>", or a
+# store set "store:iphone=<slug> ipad=<slug>" (M5) ---
 
 STORE_DIR = None  # derived from this script's location unless set
 
@@ -508,6 +509,29 @@ def _store_root():
         if os.path.isdir(root):
             return root
     return os.path.join(parent, "data", "brander_templates")
+
+
+def store_pick(spec, device):
+    """The stored template for this device. spec is one name, or a store
+    set of space-separated key=name pairs ("iphone=front-desk ipad=wards")
+    keyed like template sets: model identifier, family, then default.
+    Same rule as bin/brander_store.py."""
+    spec = spec.strip()
+    if "=" not in spec:
+        return spec
+    entries = {}
+    for part in spec.split():
+        key, sep, name = part.partition("=")
+        if not sep or not key or not name or key in entries:
+            print(f"The template setting's store set is malformed at {part!r}.")
+            sys.exit(30)
+        entries[key] = name
+    model = str(device.get("general", {}).get("model_identifier") or "")
+    for key in (model, device_family(model), "default"):
+        if key and key in entries:
+            return entries[key]
+    print(f"The store set has no template for {model or 'this device'} and no default.")
+    sys.exit(30)
 
 
 def store_template(slug):
@@ -537,7 +561,7 @@ def template_wallpaper(path, device, max_bytes):
     renderer = load_renderer()
     label = None
     if path.startswith("store:"):
-        path, label = store_template(path[len("store:"):].strip())
+        path, label = store_template(store_pick(path[len("store:"):], device))
     template, source, digest = resolve_template(path, device)
     source = label or source
     full = path if os.path.isabs(path) else os.path.join(ASSETS_DIR, path)

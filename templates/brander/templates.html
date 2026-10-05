@@ -19,8 +19,25 @@
     .brander-active { font-weight: 600; }
     .brander-active::before { content: "\2713 "; }
     .brander-problems li::before { content: "Error: "; font-weight: 600; }
+    .brander-fit { padding-left: 1.1rem; margin-bottom: .75rem; }
+    .brander-fit ul { padding-left: 1.1rem; margin: .15rem 0 .35rem; }
 </style>
 {% endblock %}
+
+{% macro fit_list(fit) %}
+{% if fit %}
+<ul class="brander-fit">
+    {% for f in fit %}
+    <li>{% if f.warnings %}<strong>{{ f.family }}: check the layout.</strong>
+        <ul>
+            {% for w in f.warnings[:6] %}<li>{{ w }}</li>{% endfor %}
+            {% if f.warnings | length > 6 %}<li>And {{ f.warnings | length - 6 }} more.</li>{% endif %}
+        </ul>
+        {% else %}<strong>{{ f.family }}: fits</strong> every screen.{% endif %}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
 
 {% block content %}
 <div class="container brander-store">
@@ -29,7 +46,8 @@
 
     {% if uploaded %}
     <div class="alert alert-success" role="status">
-        Uploaded {{ uploaded.name }} as version {{ uploaded.version }}{% if uploaded.active %}, now active{% else %}. Activate it below when you are ready{% endif %}.
+        <p class="mb-1">Uploaded {{ uploaded.name }} as version {{ uploaded.version }}{% if uploaded.active %}, now active{% else %}. Activate it below when you are ready{% endif %}.</p>
+        {{ fit_list(uploaded.fit) }}
     </div>
     {% endif %}
     {% if problems %}
@@ -55,6 +73,10 @@
             {% if used_by.get(t.slug) %}Used by: {{ used_by[t.slug] | join(", ") }}
             {% else %}Not used by any Brander yet. To use it, edit a Brander (Automations, Self-Serve) and set its template to <span class="brander-setting">store:{{ t.slug }}</span>.{% endif %}
         </p>
+        {% if fits.get(t.slug) %}
+        <p class="mb-1">How the active version fits:</p>
+        {{ fit_list(fits[t.slug]) }}
+        {% endif %}
         <table class="table table-sm brander-versions">
             <thead><tr><th scope="col">Version</th><th scope="col">Uploaded by</th><th scope="col">Uploaded</th><th scope="col">SHA-256</th><th scope="col">Status</th></tr></thead>
             <tbody>
@@ -87,6 +109,14 @@
             </ul>
         </details>
     </section>
+    {% if loop.last and templates | length > 1 %}
+    <section aria-labelledby="store-sets">
+        <h2 id="store-sets" class="h5">A template per kind of device</h2>
+        <p class="mb-0">One Brander can send iPhones and iPads different designs. Set its template to a store set:
+            <span class="brander-setting">store:iphone={{ templates[0].slug }} ipad={{ templates[1].slug }}</span>.
+            Keys are a model identifier (iPad8,5), iphone, ipad or default, tried in that order.</p>
+    </section>
+    {% endif %}
     {% else %}
     <p>No templates yet. Design one in EWOK, choose "Download for JAWA's template store", and upload the .brander.json here.</p>
     {% endfor %}
