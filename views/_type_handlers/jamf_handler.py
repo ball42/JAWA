@@ -212,6 +212,59 @@ def _extract_auth_fields(form: Any) -> Tuple[str, str, str, Any, Any]:
     )
 
 
+JAMF_STATUS_TIMEOUT_S = 5
+
+
+def jamf_status(automation: Dict, session_data: Dict) -> Dict[str, Any]:
+    """Ask Jamf Pro whether it will send this automation's event.
+
+    Returns {"state": "enabled" | "disabled" | "unknown",
+    "smart_group_id": ..., "reason": ...}. A slow or unreachable Jamf Pro
+    gives "unknown" and never raises, so the detail page still renders.
+    """
+    jamf_id = automation.get("jamf_id")
+    base = session_data.get("url") or automation.get("url")
+    if not jamf_id or not base:
+        return {"state": "unknown", "reason": "no Jamf Pro ID stored"}
+    try:
+        resp = requests.get(
+            f"{base}/JSSResource/webhooks/id/{jamf_id}",
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {session_data.get('token')}",
+                "User-Agent": USER_AGENT_STRING,
+            },
+            verify=VERIFY_SSL,
+            timeout=JAMF_STATUS_TIMEOUT_S,
+        )
+    except requests.exceptions.Timeout:
+        return {"state": "unknown", "reason": "timed out"}
+    except requests.exceptions.RequestException as err:
+        logthis.warning(f"Jamf Pro status check failed: {err}")
+        return {"state": "unknown", "reason": "connection failed"}
+    if resp.status_code != 200:
+        return {
+            "state": "unknown",
+            "reason": f"Jamf Pro answered HTTP {resp.status_code}",
+        }
+    try:
+        body = resp.json()
+        webhook = body.get("webhook") if isinstance(body, dict) else None
+        if not isinstance(webhook, dict):
+            raise ValueError("no webhook object")
+        enabled = webhook["enabled"]
+    except (ValueError, KeyError):
+        return {"state": "unknown", "reason": "unexpected reply"}
+    if isinstance(enabled, str):
+        enabled = enabled.strip().lower() == "true"
+    group = webhook.get("smart_group_id")
+    return {
+        "state": "enabled" if enabled else "disabled",
+        "smart_group_id": group,
+        "reason": "",
+    }
+
+
 class JamfHandler(AutomationHandler):
     tag = "jamfpro"
     display_name = "Jamf Pro"
@@ -365,6 +418,9 @@ class JamfHandler(AutomationHandler):
             "description": description,
             "tag": "jamfpro",
             "jamf_id": jamf_id,
+            # What Jamf Pro was told at creation. The receiver does not
+            # read this key; it only labels the automation in lists.
+            "jamf_enabled": enablement == "true",
         }
 
         return {

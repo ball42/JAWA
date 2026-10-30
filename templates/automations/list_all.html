@@ -1,5 +1,5 @@
 {% extends "shared/_layout.html" %}
-{% from "shared/_macros.html" import hero_section, automation_card, empty_state %}
+{% from "shared/_macros.html" import hero_section, automation_row, empty_state with context %}
 
 {% block title %}All Automations | JAWA{% endblock %}
 
@@ -39,11 +39,11 @@
                 <h3>{{ data.handler.display_name }}</h3>
                 <a href="/automations/{{ tag }}" style="font-size: 0.85rem; color: var(--color-primary);">View all</a>
             </div>
-            <div class="row dash-list justify-content-center" style="margin-right: 0; margin-left: 0">
+            <ul class="automation-list">
                 {% for item in data.get('items', []) %}
-                    {{ automation_card(item, data.handler, loop.index, tag) }}
+                    {{ automation_row(item, data.handler, tag) }}
                 {% endfor %}
-            </div>
+            </ul>
             {% endif %}
         {% endfor %}
     {% endif %}

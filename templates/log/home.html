@@ -104,6 +104,20 @@
         transition: all 0.15s ease;
     }
     .level-filter.active { border-color: currentColor; }
+    /* The active level carries a check mark as well as its colour. */
+    .level-filter .level-check { display: none; }
+    .level-filter[aria-pressed="true"] .level-check { display: inline; }
+    .follow-toggle {
+        padding: 0.25rem 0.6rem;
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: var(--radius-pill);
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: transparent;
+        color: var(--color-code-text);
+        cursor: pointer;
+    }
+    .follow-toggle[aria-pressed="true"] { background: rgba(255,255,255,0.12); }
     .level-filter[data-level="all"]      { color: var(--color-code-text); }
     .level-filter[data-level="all"].active { background: rgba(255,255,255,0.1); }
     .level-filter[data-level="debug"]    { color: #8a95a3; }
@@ -203,12 +217,13 @@
         <div class="log-view">
             <div class="log-toolbar">
                 <input type="text" class="log-search" id="logSearch" placeholder="Search logs...">
-                <button class="level-filter active" data-level="all" onclick="filterLevel('all', this)">ALL</button>
-                <button class="level-filter" data-level="debug" onclick="filterLevel('debug', this)">DEBUG</button>
-                <button class="level-filter" data-level="info" onclick="filterLevel('info', this)">INFO</button>
-                <button class="level-filter" data-level="warning" onclick="filterLevel('warning', this)">WARNING</button>
-                <button class="level-filter" data-level="error" onclick="filterLevel('error', this)">ERROR</button>
-                <button class="level-filter" data-level="critical" onclick="filterLevel('critical', this)">CRITICAL</button>
+                <button type="button" class="level-filter active" data-level="all" aria-pressed="true" onclick="filterLevel('all', this)"><span class="level-check" aria-hidden="true">✓ </span>ALL</button>
+                <button type="button" class="level-filter" data-level="debug" aria-pressed="false" onclick="filterLevel('debug', this)"><span class="level-check" aria-hidden="true">✓ </span>DEBUG</button>
+                <button type="button" class="level-filter" data-level="info" aria-pressed="false" onclick="filterLevel('info', this)"><span class="level-check" aria-hidden="true">✓ </span>INFO</button>
+                <button type="button" class="level-filter" data-level="warning" aria-pressed="false" onclick="filterLevel('warning', this)"><span class="level-check" aria-hidden="true">✓ </span>WARNING</button>
+                <button type="button" class="level-filter" data-level="error" aria-pressed="false" onclick="filterLevel('error', this)"><span class="level-check" aria-hidden="true">✓ </span>ERROR</button>
+                <button type="button" class="level-filter" data-level="critical" aria-pressed="false" onclick="filterLevel('critical', this)"><span class="level-check" aria-hidden="true">✓ </span>CRITICAL</button>
+                <button type="button" class="follow-toggle" id="followToggle" aria-pressed="false">Follow</button>
                 <span class="log-count" id="logCount"></span>
             </div>
             <div class="overflow-auto log-frame">
@@ -292,17 +307,78 @@
 
     window.filterLevel = function(level, btn) {
         activeLevel = level;
-        document.querySelectorAll('.level-filter').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
+        setActiveButton(btn);
         applyFilters();
+        syncUrl();
     };
 
-    document.getElementById('logSearch').addEventListener('input', function() {
+    function setActiveButton(btn) {
+        document.querySelectorAll('.level-filter').forEach(function(b) {
+            b.classList.remove('active');
+            b.setAttribute('aria-pressed', 'false');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+    }
+
+    // ?q=, ?level= and ?follow=1 make a filtered view bookmarkable and
+    // let other pages link to it. replaceState keeps the address bar in
+    // step without adding history entries.
+    var FOLLOW_MS = 10000;
+    var LEVELS = ['all', 'debug', 'info', 'warning', 'error', 'critical'];
+    var searchBox = document.getElementById('logSearch');
+    var followBtn = document.getElementById('followToggle');
+    var logFrame = document.querySelector('.log-frame');
+    var following = false;
+    var followTimer = null;
+
+    function syncUrl() {
+        var params = new URLSearchParams();
+        if (searchBox.value) params.set('q', searchBox.value);
+        if (activeLevel !== 'all') params.set('level', activeLevel);
+        if (following) params.set('follow', '1');
+        var qs = params.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+
+    function scrollToEnd() {
+        logFrame.scrollTop = logFrame.scrollHeight;
+    }
+
+    function setFollow(on) {
+        following = on;
+        followBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        followBtn.textContent = on ? 'Following: refreshes every 10 s' : 'Follow';
+        clearTimeout(followTimer);
+        if (on) {
+            followTimer = setTimeout(function() { location.reload(); }, FOLLOW_MS);
+        }
+        syncUrl();
+    }
+
+    followBtn.addEventListener('click', function() { setFollow(!following); });
+
+    searchBox.addEventListener('input', function() {
         searchTerm = this.value.toLowerCase();
         applyFilters();
+        syncUrl();
     });
 
+    var initial = new URLSearchParams(location.search);
+    var initialLevel = (initial.get('level') || 'all').toLowerCase();
+    if (LEVELS.indexOf(initialLevel) !== -1) {
+        activeLevel = initialLevel;
+        setActiveButton(document.querySelector('.level-filter[data-level="' + initialLevel + '"]'));
+    }
+    if (initial.get('q')) {
+        searchBox.value = initial.get('q');
+        searchTerm = searchBox.value.toLowerCase();
+    }
     applyFilters();
+    scrollToEnd();
+    if (initial.get('follow') === '1') {
+        setFollow(true);
+    }
 })();
 </script>
 {% endblock %}

@@ -30,8 +30,11 @@ from flask import Blueprint, request
 import json
 import os
 import subprocess
+import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from bin import data_store
 from bin import okta_verification
 from bin import logger
 
@@ -59,7 +62,11 @@ class ScriptExecutionError(Exception):
     is indistinguishable from script stdout and the caller then answers
     2xx either way -- the same "reports success, did nothing" shape that
     made template webhooks appear to fire for a whole release.
+
+    ``output`` holds whatever the script printed before it failed.
     """
+
+    output: bytes = b""
 
 
 def load_json(file_path: str) -> Union[Dict[str, Any], List[Any]]:
@@ -125,8 +132,32 @@ def run_script(webhook_data: JSONType, webhook_name: str) -> Optional[bytes]:
             return script_results(webhook_data, each_webhook)
 
 
+def _record_run(
+    name: Optional[str],
+    started: str,
+    began: float,
+    exit_code: Optional[int],
+    output: bytes,
+) -> None:
+    """Remember this run for the automation's detail page. Never raises."""
+    if not name:
+        return
+    try:
+        head_lines = output.decode("utf-8", errors="replace").splitlines()
+        head = "\n".join(head_lines[:5])[:500]
+        data_store.record_run(
+            name, started, time.monotonic() - began, exit_code, head
+        )
+    except Exception as err:
+        logthis.warning(f"Could not record run of {name}: {err}")
+
+
 def script_results(webhook_data: JSONType, each_webhook: Dict) -> bytes:
     webhook_data = json.dumps(webhook_data)
+    started = datetime.now().astimezone().isoformat(timespec="seconds")
+    began = time.monotonic()
+    return_code: Optional[int] = None
+    output = b""
     try:
         proc = subprocess.Popen(
             [each_webhook["script"], f"{webhook_data}"],
@@ -151,9 +182,9 @@ def script_results(webhook_data: JSONType, each_webhook: Dict) -> bytes:
                 f"Script execution failed for {each_webhook.get('name')} "
                 f"with exit code {return_code}"
             )
-            raise ScriptExecutionError(
-                f"script exited {return_code}"
-            )
+            failure = ScriptExecutionError(f"script exited {return_code}")
+            failure.output = output
+            raise failure
 
         return output
     except ScriptExecutionError:
@@ -162,7 +193,15 @@ def script_results(webhook_data: JSONType, each_webhook: Dict) -> bytes:
         logthis.error(
             f"Error executing script for webhook {each_webhook.get('name')}: {err}"
         )
-        raise ScriptExecutionError(str(err)) from err
+        if not output:
+            output = str(err).encode("utf-8", errors="replace")
+        failure = ScriptExecutionError(str(err))
+        failure.output = output
+        raise failure from err
+    finally:
+        _record_run(
+            each_webhook.get("name"), started, began, return_code, output
+        )
 
 
 def custom_output_options(

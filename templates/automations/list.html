@@ -1,5 +1,5 @@
 {% extends "shared/_layout.html" %}
-{% from "shared/_macros.html" import hero_section, automation_card, empty_state %}
+{% from "shared/_macros.html" import hero_section, automation_row, empty_state with context %}
 
 {% block title %}{{ handler.display_name }} | JAWA{% endblock %}
 
@@ -29,11 +29,11 @@
             create_url="/automations/" ~ auto_type ~ "/new"
         ) }}
     {% else %}
-    <div class="row dash-list justify-content-center" style="margin-right: 0; margin-left: 0">
+    <ul class="automation-list">
         {% for item in items %}
-            {{ automation_card(item, handler, loop.index, auto_type) }}
+            {{ automation_row(item, handler, auto_type) }}
         {% endfor %}
-    </div>
+    </ul>
     {% endif %}
 </div>
 {% endblock %}

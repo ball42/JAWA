@@ -481,6 +481,7 @@ class SelfServeHandler(AutomationHandler):
     icon = "webhook.png"
     supports_edit = True
     supports_auth = False
+    copyable_labels = ("Script path", "Web clip URL")
 
     def get_create_context(self, session_data: Dict) -> Dict[str, Any]:
         return {

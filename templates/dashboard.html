@@ -29,7 +29,7 @@
 {#    Sorry about the mess.    #}
 
 {% extends "shared/_layout.html" %}
-{% from "shared/_macros.html" import hero_section, automation_card, empty_state %}
+{% from "shared/_macros.html" import hero_section, automation_row, empty_state with context %}
 
 {% block title %}JAWA Dashboard{% endblock %}
 
@@ -69,13 +69,13 @@
             <h3>Webhooks</h3>
             <a href="/automations" style="font-size: 0.85rem; color: var(--color-primary);">View all</a>
         </div>
-        <div class="row dash-list justify-content-center" style="margin-right: 0; margin-left: 0">
+        <ul class="automation-list">
             {% for tag in webhook_tags %}
                 {% for item in categorized.get(tag, {}).get('items', []) %}
-                    {{ automation_card(item, categorized[tag].handler, loop.index, tag) }}
+                    {{ automation_row(item, categorized[tag].handler, tag) }}
                 {% endfor %}
             {% endfor %}
-        </div>
+        </ul>
         {% endif %}
 
         {# Cron section #}
@@ -84,11 +84,11 @@
             <h3>Timed Automations</h3>
             <a href="/automations/cron" style="font-size: 0.85rem; color: var(--color-primary);">View all</a>
         </div>
-        <div class="row dash-list justify-content-center" style="margin-right: 0; margin-left: 0">
+        <ul class="automation-list">
             {% for item in categorized.get('cron', {}).get('items', []) %}
-                {{ automation_card(item, categorized.cron.handler, loop.index, 'cron') }}
+                {{ automation_row(item, categorized.cron.handler, 'cron') }}
             {% endfor %}
-        </div>
+        </ul>
         {% endif %}
     {% endif %}
 </div>

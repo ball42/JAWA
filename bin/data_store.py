@@ -49,10 +49,15 @@ TIME_FILE = os.path.abspath(os.path.join(_base_dir, "data", "time.json"))
 WEBHOOK_SCHEMAS_FILE = os.path.abspath(
     os.path.join(_base_dir, "data", "webhook_schemas.json")
 )
+RUNS_FILE = os.path.abspath(os.path.join(_base_dir, "data", "runs.json"))
 SCRIPTS_DIR = os.path.abspath(os.path.join(_base_dir, "scripts"))
 COOLDOWNS_FILE = os.path.abspath(
     os.path.join(_base_dir, "data", "selfserve_cooldowns.json")
 )
+
+# How many recent runs are kept for each automation.
+MAX_RUNS_PER_AUTOMATION = 20
+_runs_lock = threading.Lock()
 
 
 # --- Low-level I/O ---
@@ -181,6 +186,84 @@ def remove_cron(name: str) -> Optional[Dict]:
             break
     _write_json(CRON_FILE, data)
     return removed
+
+
+# --- Run history ---
+
+
+def _read_runs() -> Dict[str, List[Dict]]:
+    """Run history, ignoring anything in runs.json that is not well formed."""
+    data = _read_json(RUNS_FILE, {})
+    if not isinstance(data, dict):
+        return {}
+    return {
+        name: [run for run in history if isinstance(run, dict)]
+        for name, history in data.items()
+        if isinstance(history, list)
+    }
+
+
+def record_run(
+    name: str,
+    started: str,
+    duration_s: float,
+    exit_code: Optional[int],
+    output_head: str,
+) -> None:
+    """Append one run of an automation, keeping the newest 20.
+
+    ``exit_code`` is None when the script could not be started.
+    """
+    entry = {
+        "started": started,
+        "duration_s": round(float(duration_s), 2),
+        "exit_code": exit_code,
+        "output_head": output_head,
+    }
+    with _runs_lock:
+        runs = _read_runs()
+        history = runs.get(name, [])
+        if not isinstance(history, list):
+            history = []
+        # Newest first.
+        runs[name] = ([entry] + history)[:MAX_RUNS_PER_AUTOMATION]
+        _write_json(RUNS_FILE, runs)
+
+
+def get_runs(name: str) -> List[Dict]:
+    """Recent runs of one automation, newest first."""
+    history = _read_runs().get(name, [])
+    return history if isinstance(history, list) else []
+
+
+def get_failed_run_names() -> set:
+    """Names whose most recent run did not exit 0."""
+    failed = set()
+    for name, history in _read_runs().items():
+        if isinstance(history, list) and history:
+            if history[0].get("exit_code") != 0:
+                failed.add(name)
+    return failed
+
+
+def rename_runs(old_name: str, new_name: str) -> None:
+    """Move a renamed automation's history to its new name."""
+    if old_name == new_name:
+        return
+    with _runs_lock:
+        runs = _read_runs()
+        moved = runs.pop(old_name, None)
+        if moved is None:
+            return
+        runs[new_name] = moved
+        _write_json(RUNS_FILE, runs)
+
+
+def clear_runs(name: str) -> None:
+    with _runs_lock:
+        runs = _read_runs()
+        if runs.pop(name, None) is not None:
+            _write_json(RUNS_FILE, runs)
 
 
 # --- Server Config ---
