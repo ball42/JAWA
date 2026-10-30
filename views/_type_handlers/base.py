@@ -58,6 +58,9 @@ class AutomationHandler(ABC):
     icon: str = "webhook.png"
     supports_edit: bool = True
     supports_auth: bool = False
+    # Detail-page labels whose values an admin is likely to paste
+    # elsewhere; they render with a Copy button.
+    copyable_labels: Tuple[str, ...] = ("Script path",)
 
     def get_edit_context(self, automation: Dict) -> Dict[str, Any]:
         """Extra template context for the edit form (none by default)."""

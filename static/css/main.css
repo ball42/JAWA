@@ -1507,3 +1507,191 @@ a.btn-hero-secondary:visited {
     font-weight: 500;
     font-size: 0.88rem;
 }
+
+/* ===== Copyable values ===== */
+.detail-field {
+    margin-bottom: 0.4rem;
+}
+
+.copy-field {
+    margin-bottom: 0.6rem;
+}
+
+.copy-field-box {
+    margin-top: 0.25rem;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 5rem 0.5rem 0.75rem;
+}
+
+.copy-field-box code {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-text);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.copy-field-box .copy-btn {
+    color: var(--color-text);
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    font-size: 0.8rem;
+    min-height: 28px;
+}
+
+.copy-field-box .copy-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.copy-field-box .copy-btn.copied {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* No hover on touch screens, so the button is always visible there. */
+@media (hover: none) {
+    .copy-btn {
+        opacity: 1;
+    }
+}
+
+/* ===== Automation list rows ===== */
+.automation-list {
+    list-style: none;
+    margin: 0 0 2rem;
+    padding: 0;
+}
+
+.automation-row {
+    margin-bottom: 0.5rem;
+}
+
+.automation-link {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 2fr) minmax(0, 1.5fr) auto;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.automation-link:hover,
+.automation-link:focus-visible {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.automation-type {
+    justify-self: start;
+}
+
+.automation-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    text-align: left;
+}
+
+.automation-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.automation-desc {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.automation-trigger {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+.automation-flags {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .automation-link {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .automation-main,
+    .automation-trigger,
+    .automation-flags {
+        grid-column: 2;
+    }
+
+    .automation-type {
+        grid-row: 1 / span 2;
+        align-self: start;
+    }
+
+    .automation-flags {
+        align-items: flex-start;
+    }
+}
+
+/* ===== Automation detail ===== */
+.script-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0.4rem 0;
+}
+
+.script-details .script-preview pre {
+    max-height: 60vh;
+    overflow: auto;
+    padding-right: 5rem;
+}
+
+.script-note {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+}
+
+.run-table {
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+.run-table th,
+.run-table td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+    text-align: left;
+}
+
+.run-output {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+}
+
+.status-text {
+    font-weight: 600;
+    white-space: nowrap;
+}

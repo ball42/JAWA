@@ -357,3 +357,59 @@ def test_absent_enabled_key_still_runs(client, jawa_env, fake_popen):
     )
     assert resp.status_code == 200
     assert len(fake_popen.calls) == 1
+
+
+def test_runs_are_recorded_and_shown(logged_in_client, jawa_env, monkeypatch):
+    client = logged_in = logged_in_client
+    _make_webhook(jawa_env)
+    headers = _basic_auth("hookuser", "hookpass")
+    monkeypatch.setattr(
+        subprocess, "Popen", ConfigurablePopen(stdout=b"all good\n")
+    )
+    assert client.post("/hooks/testhook", json=PAYLOAD, headers=headers)
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        ConfigurablePopen(stdout=b"it broke\n", returncode=1),
+    )
+    failed = client.post("/hooks/testhook", json=PAYLOAD, headers=headers)
+    assert failed.status_code == 500
+
+    runs = json.loads(jawa_env.runs_file.read_text())["testhook"]
+    assert [r["exit_code"] for r in runs] == [1, 0]
+
+    body = logged_in.get("/automations/custom/testhook").data.decode()
+    assert "Succeeded" in body
+    assert "Failed" in body
+    assert "it broke" in body
+    assert "Last run failed" in logged_in.get("/dashboard").data.decode()
+
+
+def test_run_output_masks_secrets_on_detail_page(
+    logged_in_client, jawa_env, monkeypatch
+):
+    _make_webhook(jawa_env)
+    headers = _basic_auth("hookuser", "hookpass")
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        ConfigurablePopen(stdout=b'api_token="abc123"\ndone\n'),
+    )
+    logged_in_client.post("/hooks/testhook", json=PAYLOAD, headers=headers)
+
+    body = logged_in_client.get("/automations/custom/testhook").data.decode()
+    assert "abc123" not in body
+    assert "********" in body
+    assert "done" in body
+
+
+def test_run_history_keeps_twenty_per_automation(
+    client, jawa_env, monkeypatch
+):
+    _make_webhook(jawa_env)
+    headers = _basic_auth("hookuser", "hookpass")
+    monkeypatch.setattr(subprocess, "Popen", ConfigurablePopen())
+    for _ in range(25):
+        client.post("/hooks/testhook", json=PAYLOAD, headers=headers)
+    runs = json.loads(jawa_env.runs_file.read_text())
+    assert len(runs["testhook"]) == 20

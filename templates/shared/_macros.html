@@ -21,23 +21,54 @@
 </div>
 {% endmacro %}
 
-{% macro automation_card(item, handler, loop_index, auto_type, session_url="") %}
-<div class="card col-md-6 col-lg-3 webhooks-list container-bg border-info d-flex flex-column">
-    <span class="badge {{ handler.badge_class }} mb-2">{{ handler.display_name }}</span>
-    <img src="{{ url_for('static', filename='img/' ~ handler.icon) }}" class="card-img mx-auto" alt="{{ handler.display_name }}">
-    <div class="card-body flex-column d-flex webhooks-list">
-        <h6 class="overflow-hidden card-title font-weight-bolder">{{ item.name }}</h6>
-        <a class="btn btn-jawa text-white overflow-hidden mt-auto"
-           href="/automations/{{ auto_type }}/{{ item.name }}">
-            View
-        </a>
-    </div>
+{# Text that says what starts an automation: the Jamf Pro or Okta event,
+   the hook path for a custom webhook, or the schedule for a timed job. #}
+{% macro trigger_label(item, auto_type) -%}
+{%- if auto_type == 'jamfpro' -%}{{ item.event or 'Jamf Pro event' }}
+{%- elif auto_type == 'okta' -%}{{ item.okta_event or 'Okta event' }}
+{%- elif auto_type == 'selfserve' -%}Web clip
+{%- elif auto_type == 'custom' -%}/hooks/{{ item.name }}
+{%- elif auto_type == 'cron' -%}
+  {%- set presets = {'everyhour': 'Every hour', 'everyday': 'Every day', 'everyweek': 'Every week', 'everymonth': 'Every month', 'custom': 'Custom schedule'} -%}
+  {{ presets.get(item.frequency, item.frequency) or 'Not scheduled' }}
+{%- endif -%}
+{%- endmacro %}
+
+{# One automation as a single link row: type, name, trigger, description. #}
+{% macro automation_row(item, handler, auto_type) %}
+<li class="automation-row">
+    <a class="automation-link" href="/automations/{{ auto_type }}/{{ item.name }}">
+        <span class="badge {{ handler.badge_class }} automation-type">{{ handler.display_name }}</span>
+        <span class="automation-main">
+            <span class="automation-name">{{ item.name }}</span>
+            {% if item.description %}<span class="automation-desc">{{ item.description }}</span>{% endif %}
+        </span>
+        <span class="automation-trigger">{{ trigger_label(item, auto_type) }}</span>
+        <span class="automation-flags">
+            {% if last_run_failed(item.name) %}<span class="flag-text"><span aria-hidden="true">✕</span> Last run failed</span>{% endif %}
+            {% if auto_type == 'jamfpro' and item.jamf_enabled is sameas false %}<span class="flag-text"><span aria-hidden="true">!</span> Off in Jamf Pro</span>{% endif %}
+        </span>
+    </a>
+</li>
+{% endmacro %}
+
+{# One field on a detail page. Long values wrap; nothing is clipped. #}
+{% macro detail_field(label, value) %}
+<div class="detail-field text-break">
+    <b>{{ label }}</b>: {{ value }}
 </div>
 {% endmacro %}
 
-{% macro detail_field(label, value) %}
-<div class="overflow-auto text-break" style="max-height: 10vh">
-    <b>{{ label }}</b>: {{ value }}
+{# A value an admin will paste somewhere else (a URL, a header, a path).
+   The full value wraps inside a monospace box with a Copy button; the
+   button is handled by static/js/copy.js. #}
+{% macro copy_field(label, value) %}
+<div class="copy-field">
+    <b>{{ label }}</b>:
+    <div class="code-wrapper copy-field-box">
+        <code>{{ value }}</code>
+        <button type="button" class="copy-btn" aria-label="Copy {{ label }}">Copy</button>
+    </div>
 </div>
 {% endmacro %}
 

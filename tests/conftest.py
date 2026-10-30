@@ -142,6 +142,7 @@ class JawaEnv:
         self.server_file = self.data_dir / "server.json"
         self.credentials_file = self.data_dir / "credentials.json"
         self.log_file = self.data_dir / "jawa.log"
+        self.runs_file = self.data_dir / "runs.json"
         self.webhook_schemas_file = self.data_dir / "webhook_schemas.json"
 
     def add_webhook(self, entry):
@@ -207,6 +208,7 @@ def jawa_env(tmp_path, monkeypatch):
         str(env.webhook_schemas_file),
     )
     monkeypatch.setattr(data_store, "SCRIPTS_DIR", scripts)
+    monkeypatch.setattr(data_store, "RUNS_FILE", str(env.runs_file))
 
     monkeypatch.setattr(home_view, "log_file", log_file)
     monkeypatch.setattr(home_view, "server_file", server)

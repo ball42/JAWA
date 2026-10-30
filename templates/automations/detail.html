@@ -1,5 +1,5 @@
 {% extends "shared/_layout.html" %}
-{% from "shared/_macros.html" import hero_section, detail_field %}
+{% from "shared/_macros.html" import hero_section, detail_field, copy_field %}
 
 {% block title %}{{ automation.name }} | JAWA{% endblock %}
 
@@ -25,11 +25,40 @@
         </div>
 
         {% for label, value in detail_fields %}
-            {{ detail_field(label, value) }}
+            {% if label in copyable_labels and value %}
+                {{ copy_field(label, value) }}
+            {% else %}
+                {{ detail_field(label, value) }}
+            {% endif %}
         {% endfor %}
 
+        {% if auto_type == 'custom' and not jawa_address %}
+        <div class="detail-field"><a href="/setup">Open Setup</a> to set the JAWA server address.</div>
+        {% endif %}
+
+        {% if jamf_state %}
+        <div class="detail-field" id="jamf-status">
+            <b>Jamf Pro status</b>:
+            {% if jamf_state.state == 'enabled' %}
+                <span class="status-text"><span aria-hidden="true">✓</span> Enabled</span>
+            {% elif jamf_state.state == 'disabled' %}
+                <span class="status-text"><span aria-hidden="true">!</span> Not enabled in Jamf Pro</span>
+                {% if automation.event in smart_group_events and not jamf_state.smart_group_id %}
+                    Choose a Smart Group and enable it in Jamf Pro.
+                {% else %}
+                    Enable it in Jamf Pro.
+                {% endif %}
+                {% if automation.jamf_id %}
+                <a href="{{ session_url }}/webhooks.html?id={{ automation.jamf_id }}" target="_blank" rel="noopener">Open in Jamf Pro</a>
+                {% endif %}
+            {% else %}
+                <span class="status-text"><span aria-hidden="true">ⓘ</span> Could not check Jamf Pro{% if jamf_state.reason %} ({{ jamf_state.reason }}){% endif %}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% if automation.jamf_id and auto_type == 'jamfpro' %}
-        <div class="overflow-auto text-break" style="max-height: 10vh">
+        <div class="detail-field text-break">
             <b>View in Jamf</b>: <a href="{{ session_url }}/webhooks.html?id={{ automation.jamf_id }}" target="_blank">Open in Jamf Pro</a>
         </div>
         {% endif %}
@@ -47,6 +76,77 @@
                     title="Let every device run this service again now">
                 Reset cooldowns
             </button>
+        </form>
+        {% endif %}
+
+        {% if auto_type == 'custom' %}
+        {% set hook = (jawa_address.rstrip('/') if jawa_address else '<JAWA server address>') ~ '/hooks/' ~ automation.name %}
+        {% set has_key = automation.api_key not in (none, '', 'null') %}
+        {% set has_basic = automation.webhook_username not in (none, '', 'null') %}
+        <h5 class="mt-3">Try it</h5>
+        <div class="script-preview code-wrapper">
+            <button type="button" class="copy-btn" aria-label="Copy the curl command">Copy</button>
+            <pre><code class="nohighlight">curl -X POST {{ hook }} \
+  -H 'Content-Type: application/json' \
+{% if has_key %}  -H 'x-api-key: <your key>' \
+{% endif %}{% if has_basic %}  -u '{{ automation.webhook_username }}:<your password>' \
+{% endif %}  -d '{"test": true}'</code></pre>
+        </div>
+        {% endif %}
+
+        {% if script.status == 'ok' %}
+        <details class="script-details mt-3">
+            <summary>Show script ({{ script.filename }}, {{ script.lines }} line{{ '' if script.lines == 1 else 's' }})</summary>
+            <div class="script-preview code-wrapper">
+                <button type="button" class="copy-btn" aria-label="Copy the script">Copy</button>
+                <pre><code class="language-{{ script.language }}">{{ script.content }}</code></pre>
+            </div>
+            <p class="script-note">Secrets are hidden.{% if script.truncated %} Only the first 200 KB is shown.{% endif %}</p>
+        </details>
+        {% elif script.status == 'missing' %}
+        <p class="mt-3"><span class="status-text"><span aria-hidden="true">✕</span> Script file not found</span> at {{ script.path }}</p>
+        {% elif script.status == 'outside' %}
+        <p class="mt-3 script-note"><span aria-hidden="true">ⓘ</span> The script is outside the scripts folder, so it is not shown.</p>
+        {% endif %}
+
+        {# Timed jobs are started by cron, not the receiver, so they have no run history. #}
+        {% if auto_type != 'cron' and (auto_type != 'okta' or runs) %}
+        <h5 class="mt-4">Recent runs</h5>
+        {% if runs %}
+        <table class="run-table">
+            <thead><tr><th>Started</th><th>Result</th><th>Duration</th><th>Output</th></tr></thead>
+            <tbody>
+            {% for run in runs %}
+                <tr>
+                    <td>{{ run.started }}</td>
+                    <td>
+                        {% if run.exit_code == 0 %}<span class="status-text"><span aria-hidden="true">✓</span> Succeeded</span>
+                        {% else %}<span class="status-text"><span aria-hidden="true">✕</span> Failed</span>{% if run.exit_code is not none %} (exit {{ run.exit_code }}){% endif %}{% endif %}
+                    </td>
+                    <td>{{ run.duration_s }} s</td>
+                    <td><pre class="run-output">{{ run.output_head }}</pre></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="script-note">No runs recorded yet.</p>
+        {% endif %}
+        {% endif %}
+
+        <p class="mt-3">
+            <a href="/log/home.html?q={{ automation.name|urlencode }}">View log lines for {{ automation.name }}</a>
+        </p>
+
+        {% if auto_type in ('jamfpro', 'custom') %}
+        <form method="POST" action="/automations/{{ auto_type }}/{{ automation.name }}/test" class="mt-3"
+              data-confirm-run="{{ automation.name }}">
+            {% if auto_type == 'custom' %}
+            <label for="sample-payload" class="script-note">Sample JSON body (optional)</label>
+            <textarea id="sample-payload" name="payload" rows="3" class="form-control" placeholder='{"test": true}'></textarea>
+            {% endif %}
+            <button type="submit" class="btn btn-secondary mt-2">Send sample event</button>
+            <span class="script-note">Runs the script for real.</span>
         </form>
         {% endif %}
 

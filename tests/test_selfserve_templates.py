@@ -213,3 +213,47 @@ def test_brander_script_generates_an_image_without_a_font_file(tmp_path):
         ASSETS, "lockscreen-template", "Nursing", device
     )
     assert img.size[0] > 100
+
+
+def _create_selfserve(client):
+    from tests.test_selfserve_handler import _create_form
+
+    return client.post(
+        "/automations/selfserve/new",
+        data=_create_form(),
+        content_type="multipart/form-data",
+    )
+
+
+def test_selfserve_success_page_has_no_python_dict_repr(
+    logged_in_client, jawa_env
+):
+    _create_selfserve(logged_in_client)
+    body = logged_in_client.get("/success").data.decode()
+    assert "{'" not in body
+    assert "<b>URL</b>" in body
+    assert 'class="copy-btn"' in body
+
+
+def test_selfserve_detail_offers_the_full_url_with_copy(
+    logged_in_client, jawa_env
+):
+    from bin import data_store
+
+    _create_selfserve(logged_in_client)
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    body = logged_in_client.get(
+        "/automations/selfserve/reset-ipad"
+    ).data.decode()
+    assert f"token={entry['token']}" in body
+    assert 'aria-label="Copy Web clip URL"' in body
+
+
+def test_selfserve_row_says_web_clip_and_rejects_sample_events(
+    logged_in_client, jawa_env
+):
+    _create_selfserve(logged_in_client)
+    dash = logged_in_client.get("/dashboard").data.decode()
+    assert "Web clip" in dash
+    resp = logged_in_client.post("/automations/selfserve/reset-ipad/test")
+    assert "Sample events can only be sent" in resp.data.decode()

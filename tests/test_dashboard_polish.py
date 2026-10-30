@@ -104,3 +104,48 @@ def test_hero_subtitle_escapes_a_hostile_jamf_pro_url(
     assert HOSTILE_URL not in body
     assert '"><script>' not in body
     assert "<script>alert(1)</script>" not in body
+
+
+def _seed_rows(jawa_env):
+    jawa_env.add_webhook(
+        {
+            "name": "RenameOnEnroll",
+            "tag": "jamfpro",
+            "event": "MobileDeviceEnrolled",
+            "description": "Renames new iPads to the asset tag",
+            "script": "/x/rename.sh",
+        }
+    )
+    jawa_env.add_webhook(
+        {
+            "name": "HelpdeskTicket",
+            "tag": "custom",
+            "description": "ticket hook",
+            "script": "/x/ticket.sh",
+        }
+    )
+    jawa_env.cron_file.write_text(
+        '[{"name": "NightlyInventory", "frequency": "Every day at 2:00 AM",'
+        ' "description": "", "script": "/x/n.sh"}]'
+    )
+
+
+def test_dashboard_rows_show_each_trigger(logged_in_client, jawa_env):
+    _seed_rows(jawa_env)
+    body = logged_in_client.get("/dashboard").data.decode()
+    assert "MobileDeviceEnrolled" in body
+    assert "/hooks/HelpdeskTicket" in body
+    assert "Every day at 2:00 AM" in body
+    assert "Renames new iPads to the asset tag" in body
+
+
+def test_dashboard_row_is_one_link_to_the_detail_page(
+    logged_in_client, jawa_env
+):
+    _seed_rows(jawa_env)
+    body = logged_in_client.get("/dashboard").data.decode()
+    row = body[body.index('<li class="automation-row">'):]
+    row = row[: row.index("</li>")]
+    assert row.count("<a ") == 1
+    assert 'href="/automations/jamfpro/RenameOnEnroll"' in row
+    assert "View</a>" not in body
