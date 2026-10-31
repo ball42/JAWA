@@ -360,19 +360,15 @@ def test_create_with_checkbox_creates_profile_and_stores_id(
 def test_create_refreshes_the_token_before_posting_the_profile(
     logged_in_client, jawa_env, profile_jamf, monkeypatch
 ):
-    """_fresh_token() calls get_token(), which stores the new token in
-    flask.session and returns None; the stale token snapshot in
-    session_data must be replaced with the fresh one before the
-    profile request is built, or Jamf Pro gets the old token."""
-    from flask import session
+    """fresh_token() copies the renewed token into the session_data
+    snapshot before the profile request is built, or Jamf Pro gets the
+    old token."""
 
-    monkeypatch.setattr(ssh, "validate_token", lambda *_a, **_k: False)
+    def _refresh(session_data=None):
+        session_data["token"] = "fresh-token"
+        return "fresh-token"
 
-    def _refresh(*_a, **_k):
-        session["token"] = "fresh-token"
-        return None
-
-    monkeypatch.setattr(ssh, "get_token", _refresh)
+    monkeypatch.setattr(ssh, "fresh_token", _refresh)
     logged_in_client.post(
         "/automations/selfserve/new",
         data=_create_form(create_profile="on"),
@@ -477,7 +473,7 @@ def test_token_check_failure_still_creates_the_service(
     def _boom(*_a, **_k):
         raise ValueError("bad expires value")
 
-    monkeypatch.setattr(ssh, "validate_token", _boom)
+    monkeypatch.setattr(ssh, "fresh_token", _boom)
     resp = logged_in_client.post(
         "/automations/selfserve/new",
         data=_create_form(create_profile="on"),

@@ -80,10 +80,8 @@ def _get_session_data() -> dict:
     return {
         "url": session.get("url"),
         "username": session.get("username"),
-        "password": session.get("password"),
         "token": session.get("token"),
         "expires": session.get("expires"),
-        "b64_auth": session.get("b64_auth"),
     }
 
 

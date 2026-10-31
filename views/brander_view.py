@@ -138,10 +138,10 @@ USER_AGENT = "JAWA Brander preview"
 
 def _jamf_get(path: str) -> requests.Response:
     """A read-only Classic API call with the admin's session token."""
-    from views._type_handlers.selfserve_handler import _fresh_token
+    from bin.tokens import fresh_token
 
     session_data = {"token": session.get("token"), "expires": session.get("expires")}
-    _fresh_token(session_data)
+    fresh_token(session_data)
     return requests.get(
         f"{session.get('url', '').rstrip('/')}/JSSResource/{path}",
         headers={"Authorization": f"Bearer {session_data['token']}",
