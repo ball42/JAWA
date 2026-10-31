@@ -30,6 +30,7 @@ import json
 import math
 import os
 import re
+import secrets
 import sys
 from typing import Any, Dict, List, Optional, Union
 
@@ -843,6 +844,8 @@ def enable_template(slug: str) -> Union[Response, str]:
             # precedence.
             credential_supplies=_credential_supplies(credentials),
             template_path_options=_template_path_options(),
+            # Preselected so an open endpoint is an explicit choice.
+            generated_api_key=secrets.token_urlsafe(24),
         )
 
     # POST: enable the template
@@ -989,7 +992,10 @@ def import_template() -> Union[Response, Dict[str, Any]]:
         )
 
     if request.method != "POST":
-        return {"username": session.get("username")}
+        return {
+            "username": session.get("username"),
+            "generated_api_key": secrets.token_urlsafe(24),
+        }
 
     uploaded = request.files.get("package")
     if not uploaded or not uploaded.filename.endswith(".jawa.json"):
@@ -1028,13 +1034,29 @@ def import_template() -> Union[Response, Dict[str, Any]]:
     # regular create path gives -- is the expected outcome, not an extra
     # step the admin has to discover.
     if not request.form.get("create_in_jamf"):
-        _install_package(package)
+        (
+            local_user,
+            local_pass,
+            local_apikey,
+            local_notice,
+            local_header,
+        ) = _extract_auth_fields(request.form)
+        _install_package(
+            package,
+            auth_fields={
+                "webhook_username": local_user,
+                "webhook_password": local_pass,
+                "api_key": local_apikey,
+            },
+        )
         logthis.info(
             f"[{session.get('url')}] {session.get('username')} "
             f"imported template: {package['name']} (JAWA-local)"
         )
         return _flash_success(
-            success_msg=f"Installed template: {package['name']}"
+            success_msg=f"Installed template: {package['name']}",
+            extra_notice=local_notice,
+            custom_header=local_header,
         )
 
     webhook_name = package["name"]
@@ -1075,19 +1097,17 @@ def import_template() -> Union[Response, Dict[str, Any]]:
         notice, instructions, enablement, extra_xml = _smart_group_info(
             event
         )
-        # The helpers rather than a hardcoded NONE + "null" x3: the
-        # import form carries no auth fields today, so both reduce to
-        # unauthenticated -- but going through them keeps the XML JAWA
-        # sends and the credentials JAWA stores derived from one place.
-        # Hardcoding the pair is how they drift into telling Jamf NONE
-        # while storing something the receiver then rejects (B14).
+        # The same helpers as the enable path, so the XML JAWA sends and
+        # the credentials JAWA stores derive from one place. Hardcoding
+        # the pair is how they drift into telling Jamf NONE while storing
+        # something the receiver then rejects.
         auth_xml = _build_auth_xml(request.form)
         (
             webhook_user,
             webhook_pass,
             webhook_apikey,
-            _extra_notice,
-            _custom_header,
+            auth_notice,
+            auth_header,
         ) = _extract_auth_fields(request.form)
         xml_data = _build_webhook_xml(
             webhook_name,
@@ -1130,4 +1150,6 @@ def import_template() -> Union[Response, Dict[str, Any]]:
         new_here=webhook_name,
         smart_group_notice=notice,
         smart_group_instructions=instructions,
+        extra_notice=auth_notice,
+        custom_header=auth_header,
     )

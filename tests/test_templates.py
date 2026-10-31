@@ -858,3 +858,46 @@ def test_partial_credential_set_still_takes_typed_value(jawa_env):
         "u = 'https://saved.jamfcloud.com'",
         "s = 'typed'",
     ]
+
+
+@pytest.mark.parametrize("register_in_jamf", [True, False])
+def test_import_with_api_key_rejects_unauthenticated_calls(
+    logged_in_client, jawa_env, fake_popen, register_in_jamf
+):
+    fields = {"choice": "custom", "api_key": "s3cret-import-key"}
+    if register_in_jamf:
+        fields["create_in_jamf"] = "yes"
+    resp = _upload(
+        logged_in_client,
+        _package("#!/usr/bin/env python3\nprint('hi')\n"),
+        **fields,
+    )
+    assert resp.status_code == 302
+
+    event = {"webhook": {"webhookEvent": "ComputerCheckIn"}}
+    denied = logged_in_client.post("/hooks/imported-hook", json=event)
+    assert denied.status_code == 401
+    assert fake_popen.calls == []
+
+    allowed = logged_in_client.post(
+        "/hooks/imported-hook",
+        json=event,
+        headers={"x-api-key": "s3cret-import-key"},
+    )
+    assert allowed.status_code == 200
+    assert len(fake_popen.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "path", ["/templates/import", "/templates/device-naming/enable"]
+)
+def test_import_and_enable_pages_preselect_a_generated_api_key(
+    logged_in_client, path
+):
+    body = logged_in_client.get(path).get_data(as_text=True)
+    custom = re.search(r'<input[^>]*value="custom"[^>]*>', body, re.S)
+    none = re.search(r'<input[^>]*value="none"[^>]*>', body, re.S)
+    assert custom and "checked" in custom.group(0)
+    assert none and "checked" not in none.group(0)
+    key = re.search(r'name="api_key"[^>]*value="([^"]+)"', body, re.S)
+    assert key and len(key.group(1)) >= 24
