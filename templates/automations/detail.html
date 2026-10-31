@@ -24,6 +24,13 @@
             <h4 class="mb-0">{{ automation.name }}</h4>
         </div>
 
+        {% if auto_type == 'okta' and not automation.okta_secret %}
+        <div class="alert alert-warning" role="alert">
+            This automation was created before Okta secrets were added, so JAWA
+            refuses every request for it. Delete it and create it again.
+        </div>
+        {% endif %}
+
         {% if webclip %}
         <div class="detail-field d-flex align-items-center gap-3">
             <img src="{{ webclip.icon }}" width="60" height="60" alt="Web clip icon"

@@ -20,7 +20,7 @@ class RecordingPopen:
     calls = []
     return_code = 0
 
-    def __init__(self, args, stdout=None, stderr=None):
+    def __init__(self, args, stdout=None, stderr=None, **kwargs):
         RecordingPopen.calls.append(args)
         self.stdout = io.BytesIO(b"script ran\n")
 
@@ -446,3 +446,53 @@ def test_confirm_button_is_re_enabled_when_the_page_is_restored(
     ).get_data(as_text=True)
     assert "pageshow" in body
     assert ".disabled = false" in body
+
+
+def test_rate_limit_ignores_spoofed_forwarded_for(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    ssr.reset_rate_limits()
+    codes = []
+    for i in range(ssr.RATE_LIMIT + 1):
+        resp = client.post(
+            "/selfserve/reset-ipad",
+            data=GOOD_QUERY,
+            headers={
+                "X-Forwarded-For": f"10.0.0.{i}",
+                "X-Real-IP": "203.0.113.9",
+            },
+        )
+        codes.append(resp.status_code)
+    assert codes[-1] == 429
+    ssr.reset_rate_limits()
+
+
+def test_remote_address_falls_back_to_the_connection(client, jawa_env):
+    from flask import Flask
+
+    app = Flask(__name__)
+    with app.test_request_context(
+        "/", headers={"X-Forwarded-For": "10.9.9.9"},
+        environ_base={"REMOTE_ADDR": "198.51.100.4"},
+    ):
+        assert ssr._remote_address() == "198.51.100.4"
+    with app.test_request_context(
+        "/", headers={"X-Real-IP": "203.0.113.9"},
+        environ_base={"REMOTE_ADDR": "198.51.100.4"},
+    ):
+        assert ssr._remote_address() == "203.0.113.9"
+
+
+def test_self_serve_script_timeout_shows_failure_page(
+    client, jawa_env, monkeypatch
+):
+    monkeypatch.setenv("JAWA_SCRIPT_TIMEOUT", "1")
+    script = jawa_env.scripts_dir / "reset.py"
+    script.write_text("#!/bin/sh\nsleep 60\n")
+    script.chmod(0o755)
+    _make_service(jawa_env)
+    ssr.reset_rate_limits()
+    resp = client.post("/selfserve/reset-ipad", data=GOOD_QUERY)
+    assert resp.status_code == 504
+    ssr.reset_rate_limits()

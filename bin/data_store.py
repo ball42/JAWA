@@ -63,35 +63,63 @@ _runs_lock = threading.Lock()
 # --- Low-level I/O ---
 
 
+class StoreCorruptError(Exception):
+    """A JSON store exists but cannot be parsed.
+
+    Raised instead of treating the file as empty, so the next save does
+    not overwrite the automations that are still recoverable on disk.
+    """
+
+
+_write_lock = threading.Lock()
+
+
+def atomic_write_json(filepath: str, data: Any, indent: int = 4) -> None:
+    """Write JSON through a temp file in the same folder, then rename.
+
+    The temp file is flushed and fsynced before os.replace, and the whole
+    sequence runs under a process-wide lock, so a crash or a second save
+    at the same moment never leaves a truncated file.
+    """
+    folder = os.path.dirname(os.path.abspath(filepath))
+    with _write_lock:
+        fd, tmp = tempfile.mkstemp(dir=folder, prefix=".tmp-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=indent)
+                f.flush()
+                os.fsync(f.fileno())
+            if os.path.exists(filepath):
+                os.chmod(tmp, os.stat(filepath).st_mode & 0o777)
+            os.replace(tmp, filepath)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
+
+
 def _read_json(filepath: str, default: Any = None) -> Any:
     if default is None:
         default = []
     if not os.path.isfile(filepath):
-        with open(filepath, "w") as f:
-            json.dump(default, f)
+        atomic_write_json(filepath, default)
         return default
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         try:
             return json.load(f)
-        except json.JSONDecodeError:
-            return default
+        except json.JSONDecodeError as err:
+            logthis.error(
+                f"{os.path.basename(filepath)} cannot be parsed ({err}); "
+                "leaving it untouched. Restore it from a backup or fix it "
+                "by hand."
+            )
+            raise StoreCorruptError(
+                f"{os.path.basename(filepath)} is corrupt"
+            ) from err
 
 
 def _write_json(filepath: str, data: Any) -> None:
-    """Write via a temp file and rename, so a crash or full disk never
-    leaves a truncated file (which _read_json would silently reset)."""
-    folder = os.path.dirname(os.path.abspath(filepath))
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".tmp-")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=4)
-        if os.path.exists(filepath):
-            os.chmod(tmp, os.stat(filepath).st_mode & 0o777)
-        os.replace(tmp, filepath)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
+    atomic_write_json(filepath, data)
 
 
 # --- Webhooks ---
