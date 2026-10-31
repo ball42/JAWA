@@ -196,7 +196,8 @@ def test_confirm_button_disables_itself_on_submit(
     body = client.get(
         "/selfserve/reset-ipad", query_string=GOOD_QUERY
     ).get_data(as_text=True)
-    assert "onsubmit=" in body and ".disabled = true" in body
+    assert "button.disabled = true" in body
+    assert "addEventListener('submit'" in body
 
 
 def test_get_escapes_query_values(client, jawa_env, fake_popen):
@@ -219,6 +220,65 @@ def test_get_with_wrong_token_is_401_and_does_not_echo_the_name(
     )
     assert resp.status_code == 401
     assert "reset-ipad" not in resp.get_data(as_text=True)
+
+
+def test_bad_requests_render_a_readable_problem_page(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    query = dict(GOOD_QUERY)
+    del query["udid"]
+    resp = client.get("/selfserve/reset-ipad", query_string=query)
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 400
+    assert resp.mimetype == "text/html"
+    assert "This button is not set up correctly" in body
+    assert "Ask your IT team to check this web clip." in body
+    assert "missing the device id or UDID" in body
+    assert "<svg" in body
+
+    resp = client.get(
+        "/selfserve/reset-ipad", query_string=dict(GOOD_QUERY, token="nope")
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 401
+    assert "no longer works" in body
+    assert "reset-ipad" not in body
+    # No console chrome or version string on a device page.
+    assert "Discover what" not in body
+
+
+def test_rate_limited_post_renders_a_problem_page(
+    client, jawa_env, fake_popen
+):
+    _make_service(jawa_env)
+    ssr.reset_rate_limits()
+    last = None
+    for _ in range(ssr.RATE_LIMIT + 1):
+        last = client.post("/selfserve/reset-ipad", data=GOOD_QUERY)
+    assert last.status_code == 429
+    assert "Please wait a moment" in last.get_data(as_text=True)
+    ssr.reset_rate_limits()
+
+
+def test_device_pages_use_the_brand_name_and_no_console_chrome(
+    client, jawa_env, fake_popen
+):
+    import json
+
+    from bin import data_store
+
+    with open(data_store.SERVER_FILE, "w") as handle:
+        json.dump({"brand": "Example School"}, handle)
+    _make_service(jawa_env)
+    body = client.get(
+        "/selfserve/reset-ipad", query_string=GOOD_QUERY
+    ).get_data(as_text=True)
+    assert "Example School" in body
+    assert "viewport-fit=cover" in body
+    assert "Discover what" not in body
+    assert "Jamf Automation" not in body
+    assert "main.css" not in body
 
 
 def test_get_unknown_service_is_401(client, jawa_env, fake_popen):

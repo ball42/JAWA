@@ -207,6 +207,55 @@ def _page_strings(service: Dict[str, Any], params: Dict[str, str]):
     }
 
 
+SAMPLE_PARAMS = {"DEVICENAME": "Sample iPad", "SERIALNUMBER": "XXXX0000"}
+
+# Copy for the problem page, by error status. The 401 copy never names
+# the service: the name is caller-controlled path input.
+PROBLEMS = {
+    400: {
+        "icon": "error",
+        "heading": "This button is not set up correctly",
+        "body": "Ask your IT team to check this web clip.",
+    },
+    401: {
+        "icon": "error",
+        "heading": "This button no longer works",
+        "body": "Ask your IT team for a new one.",
+    },
+    429: {
+        "icon": "info",
+        "heading": "Please wait a moment",
+        "body": "Too many taps in a row. Try again in a minute.",
+    },
+}
+
+
+def branding_name() -> str:
+    """The organisation name from Setup > Branding, or empty."""
+    return str(data_store.get_server_config().get("brand") or "")
+
+
+def render_device_page(template: str, **context: Any):
+    """Render a device-facing page with the organisation's branding."""
+    return render_template(
+        template, brand_name=branding_name(), **context
+    )
+
+
+def problem_response(err: "SelfServeRequestError"):
+    """The HTML page for a refused request, with the same status code."""
+    problem = PROBLEMS.get(err.status, PROBLEMS[400])
+    # Only the 400 reasons are safe, fixed strings worth showing; the
+    # 401 and 429 pages say everything the person needs already.
+    detail = err.message if err.status == 400 else ""
+    return (
+        render_device_page(
+            "selfserve/problem.html", problem=problem, detail=detail
+        ),
+        err.status,
+    )
+
+
 def _now() -> float:
     return time.time()
 
@@ -264,11 +313,11 @@ def service_page(service_name: str):
         service = _authorize(service_name, fields)
         jss_id, udid, params = parse_device_request(fields)
     except SelfServeRequestError as err:
-        return err.message, err.status
+        return problem_response(err)
     wait = data_store.selfserve_cooldown_remaining(
         service["name"], jss_id, _cooldown_minutes(service), _now()
     )
-    return render_template(
+    return render_device_page(
         "selfserve/confirm.html",
         cooldown=cooldown_message(wait) if wait else "",
         service_name=service["name"],
@@ -287,14 +336,18 @@ def service_run(service_name: str):
         service = _authorize(service_name, request.form)
         jss_id, udid, params = parse_device_request(request.form)
     except SelfServeRequestError as err:
-        return err.message, err.status
+        return problem_response(err)
 
     if _over_rate_limit(service["name"], _remote_address()):
         logthis.warning(
             f"429 - self-serve {service['name']}: too many confirms from "
             f"{_remote_address()}."
         )
-        return "Too many requests. Wait a minute and try again.", 429
+        return problem_response(
+            SelfServeRequestError(
+                429, "Too many requests. Wait a minute and try again."
+            )
+        )
     payload = build_selfserve_payload(
         service, jss_id, udid, params, _remote_address()
     )
@@ -315,7 +368,7 @@ def service_run(service_name: str):
             f"cooldown, {wait}s left."
         )
         return (
-            render_template(
+            render_device_page(
                 "selfserve/result.html",
                 strings=strings,
                 succeeded=False,
@@ -337,7 +390,7 @@ def service_run(service_name: str):
             f"{err}"
         )
         return (
-            render_template(
+            render_device_page(
                 "selfserve/result.html",
                 strings=strings,
                 succeeded=False,
@@ -345,6 +398,6 @@ def service_run(service_name: str):
             ),
             500,
         )
-    return render_template(
+    return render_device_page(
         "selfserve/result.html", strings=strings, succeeded=True, **back
     )

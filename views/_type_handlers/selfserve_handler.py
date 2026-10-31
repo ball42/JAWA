@@ -31,7 +31,9 @@ the managed device. See README.md, "Self-serve automations", and the
 device-facing receiver in webhook/selfserve_receiver.py.
 """
 
+import base64
 import functools
+import io
 import os
 import plistlib
 import re
@@ -42,6 +44,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import requests
 from flask import session
+from PIL import Image, UnidentifiedImageError
 
 from bin import brander_settings, logger
 from bin.data_store import (
@@ -112,7 +115,15 @@ PROFILE_PREFIX = "JAWA Self-Serve: "
 PROFILE_ENDPOINT = "/JSSResource/mobiledeviceconfigurationprofiles"
 
 
+MAX_LABEL_LENGTH = 20
+ICON_SIZE = 180
+
+
 def _label(entry: Dict[str, Any]) -> str:
+    """The home-screen label: the admin's own, else the page title."""
+    custom = str(entry.get("webclip_label") or "").strip()
+    if custom:
+        return custom
     text = _PLACEHOLDER_RE.sub(" ", entry.get("page_title", ""))
     text = _PRE_PUNCT_RE.sub(r"\1", text)
     text = " ".join(text.split())
@@ -151,11 +162,91 @@ _REPO_ROOT = os.path.dirname(
 WEBCLIP_ICON = os.path.join(_REPO_ROOT, "static", "img", "webclip-icon.png")
 
 
+ICON_DIR = os.path.join(_REPO_ROOT, "data", "selfserve_icons")
+
+
 @functools.lru_cache(maxsize=1)
-def _webclip_icon() -> bytes:
-    """The home-screen icon: the JAWA logo, 180x180 and precomposed."""
+def _default_icon() -> bytes:
+    """The JAWA logo, 180x180 and precomposed."""
     with open(WEBCLIP_ICON, "rb") as handle:
         return handle.read()
+
+
+def _icon_path(name: str) -> str:
+    return os.path.join(ICON_DIR, f"{name}.png")
+
+
+def _webclip_icon(entry: Dict[str, Any]) -> bytes:
+    """The home-screen icon: the service's own, else the JAWA logo."""
+    try:
+        with open(_icon_path(entry["name"]), "rb") as handle:
+            return handle.read()
+    except (OSError, KeyError):
+        return _default_icon()
+
+
+def webclip_preview(entry: Dict[str, Any]) -> Dict[str, str]:
+    """Label and icon (as a data URI) for the detail page."""
+    icon = base64.b64encode(_webclip_icon(entry)).decode("ascii")
+    return {"label": _label(entry), "icon": f"data:image/png;base64,{icon}"}
+
+
+def _read_icon(files: Any) -> Optional[bytes]:
+    """Validate an uploaded icon; return it as a 180x180 PNG.
+
+    Returns None when no file was sent. Raises AutomationError for a
+    file that is not an image or is smaller than the icon size. A
+    non-square image is cropped to its centre square.
+    """
+    upload = files.get("webclip_icon") if files else None
+    if not upload or not upload.filename:
+        return None
+    try:
+        with Image.open(upload.stream) as source:
+            source.load()
+            image = source.convert("RGBA")
+    except (UnidentifiedImageError, OSError, ValueError) as err:
+        raise AutomationError(
+            "Error", "The icon must be a PNG image."
+        ) from err
+    width, height = image.size
+    if min(width, height) < ICON_SIZE:
+        raise AutomationError(
+            "Error",
+            f"The icon must be at least {ICON_SIZE}x{ICON_SIZE} pixels.",
+        )
+    side = min(width, height)
+    left, top = (width - side) // 2, (height - side) // 2
+    image = image.crop((left, top, left + side, top + side)).resize(
+        (ICON_SIZE, ICON_SIZE), Image.LANCZOS
+    )
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _store_icon(name: str, png: bytes) -> None:
+    os.makedirs(ICON_DIR, exist_ok=True)
+    with open(_icon_path(name), "wb") as handle:
+        handle.write(png)
+
+
+def _remove_icon(name: str) -> None:
+    try:
+        os.remove(_icon_path(name))
+    except OSError:
+        pass
+
+
+def _require_webclip_label(form: Mapping[str, Any]) -> str:
+    label = str(form.get("webclip_label") or "").strip()
+    if len(label) > MAX_LABEL_LENGTH:
+        raise AutomationError(
+            "Error",
+            f"The home screen label can be at most {MAX_LABEL_LENGTH} "
+            "characters.",
+        )
+    return label
 
 
 def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
@@ -166,7 +257,7 @@ def build_webclip_plist(entry: Dict[str, Any], url: str) -> str:
         "PayloadContent": [
             {
                 "FullScreen": True,
-                "Icon": _webclip_icon(),
+                "Icon": _webclip_icon(entry),
                 "IsRemovable": False,
                 "Label": _label(entry),
                 "PayloadDescription": (
@@ -418,6 +509,7 @@ def build_service_entry(
     family = _require_device_family(form)
     strings = _require_page_strings(form)
     cooldown = _require_cooldown(form)
+    label = _require_webclip_label(form)
     entry = {
         "name": name,
         "tag": "selfserve",
@@ -435,6 +527,8 @@ def build_service_entry(
         "api_key": "null",
     }
     entry.update(strings)
+    if label:
+        entry["webclip_label"] = label
     return entry
 
 
@@ -511,7 +605,11 @@ class SelfServeHandler(AutomationHandler):
         _require_device_family(form)
         _require_page_strings(form)
         _require_cooldown(form)
+        _require_webclip_label(form)
+        icon = _read_icon(files)
         script_path = save_script(new_file, name)
+        if icon:
+            _store_icon(name, icon)
         entry = build_service_entry(name, script_path, form, session_data)
         wanted_profile = form.get("create_profile") == "on"
         register_profile(entry, session_data, wanted_profile)
@@ -563,9 +661,24 @@ class SelfServeHandler(AutomationHandler):
         strings = _require_page_strings(form)
         family = _require_device_family(form)
         cooldown = _require_cooldown(form)
+        label = _require_webclip_label(form)
+        icon = _read_icon(files)
         existing.update(strings)
         existing["device_family"] = family
         existing["cooldown_minutes"] = cooldown
+        if label:
+            existing["webclip_label"] = label
+        else:
+            existing.pop("webclip_label", None)
+        if icon:
+            _store_icon(existing["name"], icon)
+        rotated = form.get("rotate_token") == "on"
+        if rotated:
+            existing["token"] = mint_token()
+            logthis.info(
+                f"{session_data.get('username')} replaced the link token "
+                f"of self-serve automation {existing['name']}."
+            )
         if form.get("description"):
             existing["description"] = form.get("description")
         if files.get("new_file") and files["new_file"].filename:
@@ -573,6 +686,11 @@ class SelfServeHandler(AutomationHandler):
                 files["new_file"], existing["name"]
             )
         brander_note = _apply_brander_settings(existing["script"], form)
+        if rotated:
+            brander_note += (
+                " The link token was replaced; old web clip links stop "
+                "working."
+            )
 
         extra_notice = None
         custom_header = None
@@ -612,6 +730,7 @@ class SelfServeHandler(AutomationHandler):
     ) -> Optional[str]:
         retire_webclip_profile(automation, session_data)
         retire_script(automation.get("script", ""))
+        _remove_icon(automation.get("name", ""))
         return None
 
     def get_detail_fields(self, automation: Dict) -> List[Tuple[str, str]]:
