@@ -20,3 +20,19 @@ def test_log_page_reads_filters_from_the_url(logged_in_client, jawa_env):
         'id="followToggle"',
     ):
         assert needle in body
+
+
+def test_an_empty_log_says_so(logged_in_client, jawa_env):
+    jawa_env.log_file.write_text("")
+    body = logged_in_client.get("/log/home.html").data.decode()
+    assert "No log entries yet" in body
+    assert 'class="empty-state-icon"' in body
+
+
+def test_a_log_with_lines_has_no_empty_state(logged_in_client, jawa_env):
+    jawa_env.log_file.write_text(
+        "2026-10-31 09:00:00,000 - jawa - INFO - started\n"
+    )
+    body = logged_in_client.get("/log/home.html").data.decode()
+    assert "No log entries yet" not in body
+    assert "started" in body

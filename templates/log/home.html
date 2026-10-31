@@ -26,6 +26,7 @@
 {###}
 {## # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # ##}
 {% extends "shared/_layout.html" %}
+{% from "shared/_macros.html" import empty_state %}
 {% block title %}JAWA Log{% endblock %}
 
 {% block additional_css %}
@@ -237,6 +238,9 @@
                     {% endfor %}
                 {% endif %}
                 </ul>
+                {% if not log %}
+                {{ empty_state("No log entries yet. JAWA adds them here as it runs.", icon="log") }}
+                {% endif %}
             </div>
         </div>
     </div>

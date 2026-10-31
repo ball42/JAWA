@@ -1517,6 +1517,12 @@ a.btn-hero-secondary:visited {
     border-radius: var(--radius-lg);
 }
 
+.empty-state-icon {
+    display: block;
+    margin: 0 auto 0.75rem;
+    color: var(--color-text-secondary);
+}
+
 .empty-state-message {
     margin: 0 0 1rem;
     font-size: 0.95rem;
