@@ -65,7 +65,7 @@ from bin.data_store import (
     cron_name_exists,
 )
 from views._type_handlers import HANDLERS, get_handler
-from views._type_handlers.base import AutomationError
+from views._type_handlers.base import AutomationError, validate_webhook_name
 from views._type_handlers.jamf_handler import SMART_GROUP_EVENTS, jamf_status
 from webhook import jawa_receiver
 
@@ -556,6 +556,7 @@ def edit(auto_type: str, name: str) -> Union[Response, str]:
         )
 
     try:
+        _check_rename(auto_type, existing, request.form)
         result = handler.process_edit(
             request.form,
             request.files,
@@ -639,6 +640,23 @@ def delete(auto_type: str, name: str) -> Union[Response, str]:
 
 
 # --- Helpers ---
+
+
+def _check_rename(auto_type: str, existing: Dict, form) -> None:
+    """Raise AutomationError when an edit renames to an unusable name.
+
+    Create applies the name rules and the duplicate check; this gives
+    edit the same, so a rename cannot produce a name that no URL can
+    reach or one that another webhook or cron entry already holds.
+    """
+    if auto_type not in ("jamfpro", "custom", "cron"):
+        return
+    new_name = _extract_name(auto_type, form)
+    if not new_name or new_name == existing.get("name"):
+        return
+    validate_webhook_name(new_name)
+    if webhook_name_exists(new_name) or cron_name_exists(new_name):
+        raise AutomationError("Error", "Name already exists!")
 
 
 def _extract_name(auto_type: str, form) -> str:
