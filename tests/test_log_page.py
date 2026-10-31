@@ -1,4 +1,5 @@
 """The log page: filters in the URL, follow mode, and the level buttons."""
+import pytest
 
 
 def test_level_buttons_state_is_not_colour_only(logged_in_client, jawa_env):
@@ -36,3 +37,12 @@ def test_a_log_with_lines_has_no_empty_state(logged_in_client, jawa_env):
     body = logged_in_client.get("/log/home.html").data.decode()
     assert "No log entries yet" not in body
     assert "started" in body
+
+
+@pytest.mark.parametrize("path", ["/log/live.html", "/log/yield"])
+def test_unbounded_live_log_routes_are_gone(logged_in_client, path):
+    # Unknown paths fall through to the not-found handler, which sends a
+    # signed-in admin to the dashboard.
+    resp = logged_in_client.get(path)
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/dashboard")

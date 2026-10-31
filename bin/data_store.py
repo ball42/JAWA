@@ -43,6 +43,9 @@ _base_dir = os.path.dirname(os.path.dirname(__file__))
 WEBHOOKS_FILE = os.path.abspath(
     os.path.join(_base_dir, "data", "webhooks.json")
 )
+CREDENTIALS_FILE = os.path.abspath(
+    os.path.join(_base_dir, "data", "credentials.json")
+)
 CRON_FILE = os.path.abspath(os.path.join(_base_dir, "data", "cron.json"))
 SERVER_FILE = os.path.abspath(os.path.join(_base_dir, "data", "server.json"))
 TIME_FILE = os.path.abspath(os.path.join(_base_dir, "data", "time.json"))
@@ -74,8 +77,13 @@ class StoreCorruptError(Exception):
 _write_lock = threading.Lock()
 
 
-def atomic_write_json(filepath: str, data: Any, indent: int = 4) -> None:
+def atomic_write_json(
+    filepath: str, data: Any, indent: int = 4, private: bool = False
+) -> None:
     """Write JSON through a temp file in the same folder, then rename.
+
+    ``private`` forces owner-only (0600) permissions, for files that hold
+    secrets. Otherwise the mode of the file being replaced is kept.
 
     The temp file is flushed and fsynced before os.replace, and the whole
     sequence runs under a process-wide lock, so a crash or a second save
@@ -89,7 +97,9 @@ def atomic_write_json(filepath: str, data: Any, indent: int = 4) -> None:
                 json.dump(data, f, indent=indent)
                 f.flush()
                 os.fsync(f.fileno())
-            if os.path.exists(filepath):
+            if private:
+                os.chmod(tmp, 0o600)
+            elif os.path.exists(filepath):
                 os.chmod(tmp, os.stat(filepath).st_mode & 0o777)
             os.replace(tmp, filepath)
         except BaseException:
@@ -118,8 +128,23 @@ def _read_json(filepath: str, default: Any = None) -> Any:
             ) from err
 
 
-def _write_json(filepath: str, data: Any) -> None:
-    atomic_write_json(filepath, data)
+def _write_json(filepath: str, data: Any, private: bool = False) -> None:
+    atomic_write_json(filepath, data, private=private)
+
+
+def secure_private_files(paths: Optional[List[str]] = None) -> None:
+    """Make the stores that hold secrets readable by their owner only.
+
+    Installs created these files with the service's umask (usually
+    0644), so this runs at start-up to fix them in place.
+    """
+    for path in paths or [WEBHOOKS_FILE, CREDENTIALS_FILE]:
+        try:
+            if os.path.isfile(path) and os.stat(path).st_mode & 0o077:
+                os.chmod(path, 0o600)
+                logthis.info(f"Restricted permissions on {path} to 0600.")
+        except OSError as err:
+            logthis.error(f"Could not restrict permissions on {path}: {err}")
 
 
 # --- Webhooks ---
@@ -147,7 +172,7 @@ def webhook_name_exists(name: str) -> bool:
 def add_webhook(entry: Dict) -> None:
     data = get_all_webhooks()
     data.append(entry)
-    _write_json(WEBHOOKS_FILE, data)
+    _write_json(WEBHOOKS_FILE, data, private=True)
 
 
 def update_webhook_in_list(
@@ -161,7 +186,7 @@ def update_webhook_in_list(
 
 
 def save_all_webhooks(data: List[Dict]) -> None:
-    _write_json(WEBHOOKS_FILE, data)
+    _write_json(WEBHOOKS_FILE, data, private=True)
 
 
 def remove_webhook(name: str) -> Optional[Dict]:
@@ -172,7 +197,7 @@ def remove_webhook(name: str) -> Optional[Dict]:
             removed = dict(w)
             data.remove(w)
             break
-    _write_json(WEBHOOKS_FILE, data)
+    _write_json(WEBHOOKS_FILE, data, private=True)
     return removed
 
 

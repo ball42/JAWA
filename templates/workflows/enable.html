@@ -132,8 +132,8 @@
             {% endif %}
 
             {% if workflow.trigger_type != 'selfserve' %}
-            <h6 class="enable-section-heading">Webhook Authentication (optional)</h6>
-            {{ jamf_auth_fields() }}
+            <h6 class="enable-section-heading">Webhook Authentication</h6>
+            {{ jamf_auth_fields(default_api_key=generated_api_key) }}
             {% endif %}
 
             <div class="d-flex justify-content-center mt-4">
