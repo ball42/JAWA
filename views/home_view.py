@@ -137,6 +137,21 @@ def _login_error(title: str, message) -> Response:
     )
 
 
+def _parse_admin_names(value) -> list:
+    """Normalise an allow-list (list or comma/newline separated text)."""
+    if isinstance(value, str):
+        value = value.replace(",", "\n").splitlines()
+    return [str(name).strip() for name in (value or []) if str(name).strip()]
+
+
+def _admin_allowed(server_json: dict, username: str) -> bool:
+    """True when no allow-list is set or the account is on it."""
+    allowed = _parse_admin_names(server_json.get("allowed_admins"))
+    if not allowed:
+        return True
+    return username.strip().lower() in {name.lower() for name in allowed}
+
+
 def _validate_credentials() -> Union[Response, None]:
     """Validate password and token, returning a redirect on failure."""
     if request.form["password"] == "":
@@ -261,6 +276,26 @@ def login() -> Response:
         error = _verify_jamf_access()
         if error:
             return error
+
+        if not _admin_allowed(server_json, session["username"]):
+            logthis.warning(
+                f"[{session.get('url')}] Refusing login for "
+                f"{str(escape(session['username']))}: not in allowed_admins."
+            )
+            invalidate_token()
+            retry = {
+                "username": request.form.get("username", ""),
+                "url": request.form.get("url", ""),
+            }
+            session.clear()
+            session["login_retry"] = retry
+            return redirect(
+                url_for(
+                    LOGOUT_ENDPOINT,
+                    error_title="Login error",
+                    error_message="this account is not allowed to use JAWA",
+                )
+            )
 
         logthis.info(
             f"[{session.get('url')}] Logging In: "

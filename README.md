@@ -83,6 +83,12 @@ JAWA signs session cookies with the key in `JAWA_SECRET_KEY` when that variable 
 it creates `data/.secret_key` (mode 0600) on first start and reuses it, so a restart does not sign
 admins out. The session keeps only the Jamf Pro bearer token, never the password.
 
+Any Jamf Pro account that can sign in can use the console, and the console can upload and run
+scripts on the JAWA server. To limit that, list the permitted Jamf Pro usernames under "Allowed
+admin accounts" on the Setup page (or as `allowed_admins` in `data/server.json`). Names are
+compared case-insensitively. While the list is empty, which is the default so existing installs
+keep working, every account that Jamf Pro accepts can sign in, and the Setup page shows a warning.
+
 ### Network Requirements:
 
 - Inbound port 443 from JPS for

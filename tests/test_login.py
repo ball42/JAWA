@@ -694,3 +694,62 @@ def test_failed_keep_alive_ends_the_session(
     assert "/logout" in resp.headers["Location"]
     with logged_in_client.session_transaction() as sess:
         assert "token" not in sess
+
+
+def _set_allowed_admins(jawa_env, names):
+    import json
+    data = json.loads(jawa_env.server_file.read_text())
+    data["allowed_admins"] = names
+    jawa_env.server_file.write_text(json.dumps(data))
+
+
+def _sign_in(client, username):
+    return client.post(
+        "/login",
+        data={"url": "https://jamf.example.test", "username": username,
+              "password": "hunter2"},
+    )
+
+
+def test_login_refuses_users_outside_allowed_admins(
+    client, jawa_env, fake_jamf
+):
+    _set_allowed_admins(jawa_env, ["alice"])
+    resp = _sign_in(client, "bob")
+    assert resp.status_code == 302
+    assert "/logout" in resp.headers["Location"]
+    assert client.get("/dashboard").status_code == 302
+    with client.session_transaction() as sess:
+        assert "username" not in sess
+
+    resp = _sign_in(client, "Alice")
+    assert resp.status_code == 302
+    assert "/dashboard" in resp.headers["Location"]
+    assert client.get("/dashboard").status_code == 200
+
+
+def test_empty_allowed_admins_keeps_open_login(client, jawa_env, fake_jamf):
+    resp = _sign_in(client, "anyone")
+    assert "/dashboard" in resp.headers["Location"]
+
+
+def test_setup_warns_when_allowed_admins_is_empty(logged_in_client):
+    body = logged_in_client.get("/setup").data.decode()
+    assert "Allowed admin accounts" in body
+    assert "any Jamf Pro account that can sign in" in body
+
+
+def test_setup_saves_allowed_admins_and_keeps_current_user(
+    logged_in_client, jawa_env
+):
+    import json
+    resp = logged_in_client.post(
+        "/setup",
+        data={"address": "https://jawa.example.test",
+              "allowed_admins": "alice\nBob, carol"},
+    )
+    assert resp.status_code == 302
+    saved = json.loads(jawa_env.server_file.read_text())["allowed_admins"]
+    assert saved == ["alice", "Bob", "carol", "pytest-admin"]
+    body = logged_in_client.get("/setup").data.decode()
+    assert "any Jamf Pro account that can sign in" not in body
