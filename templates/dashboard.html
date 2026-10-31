@@ -50,11 +50,16 @@
     {% endfor %}
 
     {% if not ns.has_any %}
-        <div class="form-container">
-            {{ empty_state("No Jamf Pro webhooks to display.", "/automations/jamfpro/new") }}
-            {{ empty_state("No Okta webhooks to display.", "/automations/okta/new") }}
-            {{ empty_state("No Custom webhooks to display.", "/automations/custom/new") }}
-            {{ empty_state("No Timed Automations to display.", "/automations/cron/new") }}
+        <div class="start-here">
+            <h3>Start here</h3>
+            <p>JAWA runs your scripts when something happens in Jamf Pro or on a schedule. Pick the kind of automation you need.</p>
+            <ul>
+                <li><a href="/automations/jamfpro/new"><b>Jamf Pro webhook</b></a>: run a script when Jamf Pro reports an event, such as a device enrolling.</li>
+                <li><a href="/automations/okta/new"><b>Okta webhook</b></a>: run a script when Okta reports an event, such as a user leaving.</li>
+                <li><a href="/automations/custom/new"><b>Custom webhook</b></a>: run a script when any other service calls a URL on this server.</li>
+                <li><a href="/automations/cron/new"><b>Timed automation</b></a>: run a script on a schedule, such as every night.</li>
+            </ul>
+            <a href="/automations/jamfpro/new" class="btn btn-jawa btn-action">Create a Jamf Pro webhook</a>
         </div>
     {% else %}
         {# Webhooks section #}

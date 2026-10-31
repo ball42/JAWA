@@ -177,7 +177,6 @@ h3 {
     color: #FFFFFF;
     font-size: 17px;
     cursor: pointer !important;
-    outline: none;
 }
 
 .submit:hover {
@@ -362,6 +361,18 @@ h3 {
 
 .modal-footer .btn-jawa {
     font-size: unset;
+}
+
+/* ===== Keyboard focus ===== */
+:where(.btn, .nav-link, .navbar-brand, .navbar-toggler, .filter-btn, a.card-link, .submit):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* On the burgundy navbar and hero the accent clears 3:1; on light
+   surfaces the primary blue does. */
+:where(.navbar, .hero-section) :where(.btn, .nav-link, .navbar-brand, .navbar-toggler, a):focus-visible {
+    outline-color: var(--color-accent);
 }
 
 /* ===== Buttons ===== */
@@ -686,12 +697,6 @@ footer a {
     background-color: var(--color-surface);
 }
 
-@media (max-width: 979px) {
-    body {
-        padding-top: 0;
-    }
-}
-
 .sub_links.affix {
     position: fixed;
     top: 0;
@@ -902,6 +907,29 @@ form.files-form {
 .btn-action {
     min-width: 120px;
     padding: 0.45rem 1.25rem;
+}
+
+/* Button rows on a phone: wrap, and keep Delete on its own line. */
+.action-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+@media (max-width: 575px) {
+    .action-row {
+        flex-wrap: wrap;
+        row-gap: 12px;
+    }
+
+    .action-row .btn-action {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .action-row .btn-danger {
+        flex-basis: 100%;
+    }
 }
 
 /* ===== Code / Script Previews ===== */
@@ -1493,6 +1521,28 @@ a.btn-hero-secondary:visited {
     margin: 0 0 1rem;
     font-size: 0.95rem;
     color: var(--color-text-secondary);
+}
+
+.start-here {
+    max-width: 800px;
+    margin: 1rem auto;
+    padding: 2rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+}
+
+.start-here h3 {
+    margin: 0 0 0.5rem;
+}
+
+.start-here ul {
+    margin: 0 0 1.25rem;
+    padding-left: 1.25rem;
+}
+
+.start-here li {
+    margin-bottom: 0.4rem;
 }
 
 /* Field group whose value comes from the selected saved credential set.
