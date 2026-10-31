@@ -167,3 +167,6 @@ resources/files/
 /scripts/
 data/brander_templates/
 data/selfserve_icons/
+
+# ignore the generated session key
+data/.secret_key

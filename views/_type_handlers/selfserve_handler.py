@@ -43,7 +43,6 @@ import uuid
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import requests
-from flask import session
 from PIL import Image, UnidentifiedImageError
 
 from bin import brander_settings, logger
@@ -53,7 +52,7 @@ from bin.data_store import (
     save_all_webhooks,
     save_script,
 )
-from bin.tokens import get_token, validate_token
+from bin.tokens import SessionEnded, fresh_token
 from views._type_handlers.base import AutomationError, AutomationHandler
 from views._type_handlers.jamf_handler import (
     USER_AGENT_STRING,
@@ -313,20 +312,6 @@ def _headers(session_data: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def _fresh_token(session_data: Dict[str, Any]) -> None:
-    """Refresh session_data's token snapshot when it has expired.
-
-    get_token() stores the new token/expires in flask.session and
-    returns None; _headers() reads session_data (a snapshot taken
-    earlier), so the fresh values must be copied back or the request
-    goes out with the stale token.
-    """
-    if not validate_token(session_data.get("expires")):
-        get_token()
-        session_data["token"] = session.get("token")
-        session_data["expires"] = session.get("expires")
-
-
 def create_webclip_profile(
     entry: Dict[str, Any], url: str, session_data: Dict[str, Any]
 ) -> Optional[str]:
@@ -338,7 +323,7 @@ def create_webclip_profile(
     """
     full_url = f"{session_data['url']}{PROFILE_ENDPOINT}/id/0"
     try:
-        _fresh_token(session_data)
+        fresh_token(session_data)
         resp = requests.post(
             full_url,
             headers=_headers(session_data),
@@ -346,6 +331,8 @@ def create_webclip_profile(
             verify=VERIFY_SSL,
             timeout=30,
         )
+    except SessionEnded:
+        raise
     except Exception as err:
         logthis.error(
             f"Could not create the web clip profile for "
@@ -377,7 +364,7 @@ def update_webclip_profile(
         f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
     )
     try:
-        _fresh_token(session_data)
+        fresh_token(session_data)
         resp = requests.put(
             full_url,
             headers=_headers(session_data),
@@ -385,6 +372,8 @@ def update_webclip_profile(
             verify=VERIFY_SSL,
             timeout=30,
         )
+    except SessionEnded:
+        raise
     except Exception as err:
         logthis.error(f"Could not update profile {entry['jamf_id']}: {err}")
         return False
@@ -416,7 +405,7 @@ def retire_webclip_profile(
         f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
     )
     try:
-        _fresh_token(session_data)
+        fresh_token(session_data)
         resp = requests.put(
             full_url,
             headers=_headers(session_data),
@@ -429,6 +418,8 @@ def retire_webclip_profile(
                 f"Error retiring profile {entry['jamf_id']}: "
                 f"HTTP {resp.status_code}"
             )
+    except SessionEnded:
+        raise
     except Exception as err:
         logthis.error(f"Failed to retire profile {entry['jamf_id']}: {err}")
 
