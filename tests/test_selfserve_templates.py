@@ -257,3 +257,81 @@ def test_selfserve_row_says_web_clip_and_rejects_sample_events(
     assert "Web clip" in dash
     resp = logged_in_client.post("/automations/selfserve/reset-ipad/test")
     assert "Sample events can only be sent" in resp.data.decode()
+
+
+# --- device page behaviour and the admin preview ---
+
+_SERVICE = {
+    "name": "reset-ipad",
+    "tag": "selfserve",
+    "url": "https://jamf.example.test",
+    "jawa_admin": "pytest-admin",
+    "script": "/nonexistent/reset.sh",
+    "description": "preview harness",
+    "token": "preview-token-value",
+    "device_family": "mobile",
+    "cooldown_minutes": 5,
+    "page_title": "Clear the cache on {DEVICENAME}",
+    "page_description": "Serial {SERIALNUMBER}.",
+    "confirm_label": "Clear it",
+    "success_message": "Cleared {DEVICENAME}.",
+    "failure_message": "Could not clear {DEVICENAME}.",
+    "jamf_id": None,
+    "profile_status": "skipped",
+    "webhook_username": "null",
+    "webhook_password": "null",
+    "api_key": "null",
+}
+
+
+def test_confirm_page_has_a_progress_live_region(client, jawa_env):
+    jawa_env.add_webhook(dict(_SERVICE))
+    body = client.get(
+        "/selfserve/reset-ipad",
+        query_string={
+            "token": _SERVICE["token"],
+            "id": "7",
+            "udid": "UDID-1",
+            "DEVICENAME": "Sample iPad",
+        },
+    ).get_data(as_text=True)
+    assert 'aria-live="polite"' in body
+    assert "Working..." in body
+    assert "Keep this screen open" in body
+    assert "prefers-reduced-motion" in client.get(
+        "/static/css/selfserve.css"
+    ).get_data(as_text=True)
+
+
+@pytest.mark.parametrize(
+    "state", ["confirm", "success", "failure", "cooldown"]
+)
+def test_preview_renders_without_running(
+    logged_in_client, jawa_env, monkeypatch, state
+):
+    import subprocess
+
+    calls = []
+    monkeypatch.setattr(
+        subprocess, "Popen", lambda *a, **k: calls.append(a)
+    )
+    jawa_env.add_webhook(dict(_SERVICE))
+    resp = logged_in_client.get(
+        f"/automations/selfserve/reset-ipad/preview?state={state}"
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Sample iPad" in body
+    assert "{DEVICENAME}" not in body
+    assert _SERVICE["token"] not in body
+    assert 'action="/selfserve/' not in body
+    assert "&lt;form" in body and "action=" not in body.split("srcdoc=")[1]
+    assert "Preview only. Buttons here do not run the script." in body
+    assert calls == []
+
+
+def test_preview_requires_login(client, jawa_env):
+    jawa_env.add_webhook(dict(_SERVICE))
+    resp = client.get("/automations/selfserve/reset-ipad/preview")
+    assert resp.status_code == 302
+    assert "/selfserve" not in resp.headers["Location"]

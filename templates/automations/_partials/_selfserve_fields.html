@@ -51,6 +51,29 @@
        placeholder="Failure message" required
        value="{{ info.failure_message if info else '' }}">
 
+<fieldset class="mt-3">
+    <legend class="h6">Home screen</legend>
+    <label class="form-label" for="webclip_label">Home screen label</label>
+    <input name="webclip_label" id="webclip_label" class="form-control"
+           maxlength="20" placeholder="Same as the page title"
+           value="{{ info.webclip_label if info and info.webclip_label else '' }}">
+    <small class="form-text">Shown under the icon. Leave empty to use the page title.</small>
+    <label class="form-label mt-2" for="webclip_icon">Icon</label>
+    <input name="webclip_icon" id="webclip_icon" type="file"
+           accept="image/png" class="form-control">
+    <small class="form-text">Square PNG, at least 180x180. Leave empty to use the JAWA icon.</small>
+</fieldset>
+
+{% if edit_mode %}
+<div class="form-check mt-3">
+    <input class="form-check-input" type="checkbox" name="rotate_token"
+           id="rotate_token" value="on">
+    <label class="form-check-label" for="rotate_token">
+        Replace the link token (the old web clip link stops working)
+    </label>
+</div>
+{% endif %}
+
 {% if edit_mode and brander_settings %}
 <fieldset class="mt-4">
     <legend class="h6">Brander settings</legend>

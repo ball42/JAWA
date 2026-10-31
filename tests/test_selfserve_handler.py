@@ -509,3 +509,112 @@ def test_edit_marks_the_profile_failed_when_jamf_refuses_the_update(
     )
     entry = data_store.get_webhook_by_name("reset-ipad")
     assert entry["profile_status"] == "failed"
+
+
+def _png(size):
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (size, size), (200, 30, 30)).save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+def test_webclip_uses_custom_label_and_icon(
+    logged_in_client, jawa_env, profile_jamf, monkeypatch, tmp_path
+):
+    from PIL import Image
+
+    monkeypatch.setattr(ssh, "ICON_DIR", str(tmp_path / "icons"))
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(
+            create_profile="on",
+            webclip_label="Clear cache",
+            webclip_icon=(_png(512), "icon.png"),
+        ),
+        content_type="multipart/form-data",
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry["webclip_label"] == "Clear cache"
+    _, kwargs = profile_jamf.posts[0]
+    root = ET.fromstring(kwargs["data"])
+    plist = plistlib.loads(root.find("general/payloads").text.encode())
+    clip = plist["PayloadContent"][0]
+    assert clip["Label"] == "Clear cache"
+    with Image.open(io.BytesIO(clip["Icon"])) as icon:
+        assert icon.format == "PNG"
+        assert icon.size == (180, 180)
+
+
+def test_webclip_without_label_or_icon_keeps_the_defaults(
+    logged_in_client, jawa_env, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(ssh, "ICON_DIR", str(tmp_path / "icons"))
+    entry = {"name": "reset-ipad", "page_title": "Reset {DEVICENAME}?"}
+    plist = plistlib.loads(
+        ssh.build_webclip_plist(entry, "https://x/").encode()
+    )
+    clip = plist["PayloadContent"][0]
+    assert clip["Label"] == "Reset?"
+    assert clip["Icon"] == ssh._default_icon()
+
+
+def test_create_rejects_a_small_icon_and_a_long_label(
+    logged_in_client, jawa_env, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(ssh, "ICON_DIR", str(tmp_path / "icons"))
+    for extra in (
+        {"webclip_icon": (_png(64), "icon.png")},
+        {"webclip_label": "x" * 21},
+    ):
+        logged_in_client.post(
+            "/automations/selfserve/new",
+            data=_create_form(**extra),
+            content_type="multipart/form-data",
+        )
+        assert data_store.get_webhook_by_name("reset-ipad") is None
+
+
+def test_edit_can_rotate_the_token(
+    logged_in_client, client, jawa_env, profile_jamf
+):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    old = data_store.get_webhook_by_name("reset-ipad")["token"]
+    form = _create_form(rotate_token="on")
+    del form["new_file"]
+    logged_in_client.post(
+        "/automations/selfserve/reset-ipad/edit",
+        data=dict(form, button_choice="Save"),
+        content_type="multipart/form-data",
+    )
+    new = data_store.get_webhook_by_name("reset-ipad")["token"]
+    assert new != old
+    query = {"token": old, "id": "7", "udid": "UDID-1"}
+    assert client.get("/selfserve/reset-ipad", query_string=query).status_code == 401
+    query["token"] = new
+    assert client.get("/selfserve/reset-ipad", query_string=query).status_code == 200
+    _, kwargs = profile_jamf.puts[-1]
+    assert new in kwargs["data"]
+    assert old not in kwargs["data"]
+
+
+def test_edit_without_the_box_keeps_the_token(logged_in_client, jawa_env):
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(),
+        content_type="multipart/form-data",
+    )
+    old = data_store.get_webhook_by_name("reset-ipad")["token"]
+    form = _create_form()
+    del form["new_file"]
+    logged_in_client.post(
+        "/automations/selfserve/reset-ipad/edit",
+        data=dict(form, button_choice="Save"),
+        content_type="multipart/form-data",
+    )
+    assert data_store.get_webhook_by_name("reset-ipad")["token"] == old

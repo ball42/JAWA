@@ -256,9 +256,16 @@ def detail(auto_type: str, name: str) -> Union[Response, str]:
         jamf_state = jamf_status(automation, _get_session_data())
         _remember_jamf_enabled(automation, jamf_state)
 
+    webclip = None
+    if auto_type == "selfserve":
+        from views._type_handlers.selfserve_handler import webclip_preview
+
+        webclip = webclip_preview(automation)
+
     return render_template(
         "automations/detail.html",
         handler=handler,
+        webclip=webclip,
         auto_type=auto_type,
         automation=automation,
         detail_fields=detail_fields,
@@ -454,6 +461,49 @@ def reset_cooldowns(name: str) -> Response:
     )
     return redirect(
         url_for("automations.detail", auto_type="selfserve", name=name)
+    )
+
+
+PREVIEW_STATES = (
+    ("confirm", "Confirm"),
+    ("success", "Success"),
+    ("failure", "Failure"),
+    ("cooldown", "Cooldown"),
+)
+
+
+@blueprint.route("/automations/selfserve/<name>/preview")
+@login_required
+def preview_selfserve(name: str) -> str:
+    """Show the device pages with sample values. Nothing here can run
+    the script: the preview pages carry no token, no form action and a
+    disabled button."""
+    from webhook import selfserve_receiver as receiver
+
+    automation = get_webhook_by_name(name)
+    if not automation or automation.get("tag") != "selfserve":
+        abort(404)
+    state = request.args.get("state", "confirm")
+    if state not in dict(PREVIEW_STATES):
+        state = "confirm"
+    strings = receiver._page_strings(automation, receiver.SAMPLE_PARAMS)
+    context: Dict[str, Any] = {"strings": strings, "preview": True,
+                               "service_name": automation["name"]}
+    if state in ("confirm", "cooldown"):
+        template = "selfserve/confirm.html"
+        context["cooldown"] = (
+            receiver.cooldown_message(300) if state == "cooldown" else ""
+        )
+    else:
+        template = "selfserve/result.html"
+        context["succeeded"] = state == "success"
+    device_page = receiver.render_device_page(template, **context)
+    return render_template(
+        "automations/selfserve_preview.html",
+        automation=automation,
+        states=PREVIEW_STATES,
+        state=state,
+        device_page=device_page,
     )
 
 
