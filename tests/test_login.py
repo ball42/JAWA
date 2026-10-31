@@ -753,3 +753,73 @@ def test_setup_saves_allowed_admins_and_keeps_current_user(
     assert saved == ["alice", "Bob", "carol", "pytest-admin"]
     body = logged_in_client.get("/setup").data.decode()
     assert "any Jamf Pro account that can sign in" not in body
+
+
+def _deny_tokens(monkeypatch, jamf_fake_http):
+    import requests
+    response_cls, default_post = jamf_fake_http
+
+    def post(url, **kwargs):
+        if url.endswith("/api/v1/auth/token"):
+            return response_cls({}, status_code=401)
+        return default_post(url, **kwargs)
+
+    monkeypatch.setattr(requests, "post", post)
+
+
+def test_failed_login_logs_client_address(
+    client, jawa_env, fake_jamf, monkeypatch, jamf_fake_http
+):
+    import re
+    _deny_tokens(monkeypatch, jamf_fake_http)
+    resp = client.post(
+        "/login",
+        data={"url": "https://jamf.example.test", "username": "mallory",
+              "password": "wrong"},
+        headers={"X-Real-IP": "203.0.113.9"},
+    )
+    assert resp.status_code == 302
+    lines = (jawa_env.data_dir / "jawa-auth.log").read_text().splitlines()
+    assert len(lines) == 1
+    assert re.fullmatch(
+        r"\S+ \S+ - jawa\.auth - WARNING - "
+        r"LOGIN FAILED user=mallory ip=203\.0\.113\.9",
+        lines[0],
+    )
+
+
+def test_failed_login_log_line_cannot_be_forged_by_the_user_name(
+    client, jawa_env, fake_jamf, monkeypatch, jamf_fake_http
+):
+    _deny_tokens(monkeypatch, jamf_fake_http)
+    client.post(
+        "/login",
+        data={"url": "https://jamf.example.test",
+              "username": "x ip=198.51.100.1\nLOGIN FAILED user=y",
+              "password": "wrong"},
+        headers={"X-Real-IP": "203.0.113.9"},
+    )
+    lines = (jawa_env.data_dir / "jawa-auth.log").read_text().splitlines()
+    assert len(lines) == 1
+    assert lines[0].endswith(" ip=203.0.113.9")
+    assert lines[0].count("LOGIN FAILED") == 1
+
+
+def test_failed_login_falls_back_to_the_socket_address(
+    client, jawa_env, fake_jamf, monkeypatch, jamf_fake_http
+):
+    _deny_tokens(monkeypatch, jamf_fake_http)
+    client.post(
+        "/login",
+        data={"url": "https://jamf.example.test", "username": "u",
+              "password": "wrong"},
+    )
+    line = (jawa_env.data_dir / "jawa-auth.log").read_text()
+    assert " ip=127.0.0.1" in line
+
+
+def test_successful_login_writes_no_failure_line(client, jawa_env, fake_jamf):
+    _sign_in(client, "alice")
+    assert not (jawa_env.data_dir / "jawa-auth.log").exists() or not (
+        jawa_env.data_dir / "jawa-auth.log"
+    ).read_text()
