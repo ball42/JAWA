@@ -1,0 +1,86 @@
+{% extends "shared/_layout.html" %}
+
+{% block title %}Brander preview | JAWA{% endblock %}
+
+{% block additional_css %}
+<style>
+    .brander-preview { max-width: 980px; margin: 2rem auto; }
+    .brander-preview .lead { color: var(--color-text-secondary); }
+    .brander-preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+    .brander-preview-image img { max-width: 100%; max-height: 70vh; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+    .brander-problems li::before { content: "Error: "; font-weight: 600; }
+    .brander-warnings li::before { content: "\26A0  Warning: "; font-weight: 600; }
+    @media (max-width: 800px) { .brander-preview-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container brander-preview">
+    <h1 class="h3">Brander preview</h1>
+    <p class="lead">Render a template for a real device from its Jamf Pro record. Nothing is sent to the device.</p>
+
+    {% if problems %}
+    <div class="alert alert-danger" role="alert">
+        <ul class="brander-problems mb-0">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/brander/preview" class="mb-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-6">
+                <label for="template" class="form-label fw-semibold">Template</label>
+                <select class="form-select" id="template" name="template" required>
+                    {% for c in choices %}<option value="{{ c }}" {% if form and form.template == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="jss_id" class="form-label fw-semibold">Device's Jamf Pro ID</label>
+                <input class="form-control" id="jss_id" name="jss_id" inputmode="numeric" required
+                       value="{{ form.jss_id if form else '' }}">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-jawa w-100">Preview</button>
+            </div>
+        </div>
+        <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="allow_person_fields" name="allow_person_fields"
+                   {% if form and form.allow %}checked{% endif %}>
+            <label class="form-check-label" for="allow_person_fields">Preview as a Brander that allows personal fields</label>
+        </div>
+    </form>
+
+    {% if image %}
+    <div class="brander-preview-grid">
+        <div class="brander-preview-image">
+            <img src="data:image/png;base64,{{ image }}" alt="Wallpaper preview for {{ device.name }}">
+        </div>
+        <div>
+            <p class="alert alert-info" role="status">Nothing was sent to the device.</p>
+            <dl>
+                <dt>Device</dt><dd>{{ device.name }} ({{ device.model or 'unknown model' }})</dd>
+                <dt>Template</dt><dd>{{ chosen }}</dd>
+                <dt>Image</dt><dd>{{ size[0] }}×{{ size[1] }}</dd>
+                <dt>Would Brander send it?</dt>
+                <dd>{% if device.supervised is sameas true and device.os_type in ('iOS', 'iPadOS') %}Yes: supervised {{ device.os_type }}.{% else %}No: Brander only sends to supervised iOS and iPadOS devices.{% endif %}</dd>
+            </dl>
+            <h2 class="h6">Fit on {{ fit.screen }} screens</h2>
+            <p class="small">Checked on: {{ fit.devices | join(", ") }}.</p>
+            {% if fit.warnings %}
+            <ul class="brander-warnings">{% for w in fit.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+            {% else %}
+            <p>Fits every one of them.</p>
+            {% endif %}
+            {% if warnings %}
+            <h2 class="h6">Warnings</h2>
+            <ul class="brander-warnings">{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+            {% else %}
+            <p>No warnings.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <hr class="my-4">
+    <p>For EWOK's role picker: <a href="/brander/ea-names.json">download this tenant's extension attribute names</a> (names only).</p>
+</div>
+{% endblock %}
