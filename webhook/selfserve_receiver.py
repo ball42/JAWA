@@ -170,10 +170,10 @@ def query_fields() -> Dict[str, str]:
 
 
 def _remote_address() -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.remote_addr or ""
+    # nginx sets X-Real-IP from the connection address. X-Forwarded-For
+    # carries whatever the client sent first, so it is never read.
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    return real_ip or request.remote_addr or ""
 
 
 def _authorize(service_name: str, fields: Mapping[str, str]):
@@ -396,7 +396,7 @@ def service_run(service_name: str):
                 succeeded=False,
                 **back,
             ),
-            500,
+            err.status,
         )
     return render_device_page(
         "selfserve/result.html", strings=strings, succeeded=True, **back

@@ -27,9 +27,12 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 from flask import Blueprint, request
+import hmac
 import json
 import os
+import signal
 import subprocess
+import threading
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -67,6 +70,26 @@ class ScriptExecutionError(Exception):
     """
 
     output: bytes = b""
+    status: int = 500
+
+
+class ScriptTimeoutError(ScriptExecutionError):
+    """The script ran past JAWA_SCRIPT_TIMEOUT and its process group was killed."""
+
+    status = 504
+
+
+DEFAULT_SCRIPT_TIMEOUT = 120.0
+
+
+def script_timeout() -> float:
+    """Seconds a script may run, from JAWA_SCRIPT_TIMEOUT (default 120)."""
+    raw = os.environ.get("JAWA_SCRIPT_TIMEOUT")
+    try:
+        value = float(raw) if raw else DEFAULT_SCRIPT_TIMEOUT
+    except ValueError:
+        return DEFAULT_SCRIPT_TIMEOUT
+    return value if value > 0 else DEFAULT_SCRIPT_TIMEOUT
 
 
 def load_json(file_path: str) -> Union[Dict[str, Any], List[Any]]:
@@ -106,6 +129,21 @@ def validate_webhook(
                 )
                 return False
             truth_test = True
+            if each_webhook.get("tag") == "okta":
+                # Okta sends the stored secret verbatim as the
+                # Authorization header. An entry created before secrets
+                # existed has none, so it fails closed.
+                secret = each_webhook.get("okta_secret")
+                if not secret:
+                    logthis.warning(
+                        f"Rejecting /hooks/{webhook_name}: this Okta "
+                        "automation has no secret. Delete and re-create it."
+                    )
+                    return False
+                supplied = request.headers.get("Authorization", "")
+                return hmac.compare_digest(
+                    supplied.encode("utf-8"), str(secret).encode("utf-8")
+                )
             if (
                 # Missing auth keys default to the "null" no-auth
                 # sentinel so a legacy/hand-edited entry degrades to
@@ -163,9 +201,35 @@ def script_results(webhook_data: JSONType, each_webhook: Dict) -> bytes:
             [each_webhook["script"], f"{webhook_data}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
-        output = proc.stdout.read()
-        return_code = proc.wait()
+        timed_out = threading.Event()
+
+        def _kill_group() -> None:
+            timed_out.set()
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+
+        timer = threading.Timer(script_timeout(), _kill_group)
+        timer.daemon = True
+        timer.start()
+        try:
+            output = proc.stdout.read()
+            return_code = proc.wait()
+        finally:
+            timer.cancel()
+        if timed_out.is_set():
+            logthis.error(
+                f"Script for {each_webhook.get('name')} timed out after "
+                f"{script_timeout():g}s; its process group was killed."
+            )
+            failure = ScriptTimeoutError(
+                f"script timed out after {script_timeout():g} seconds"
+            )
+            failure.output = output
+            raise failure
 
         # Tolerant for the same reason as the response decode below: a
         # script that exited 0 must not be turned into a failure by the
@@ -276,7 +340,10 @@ def webhook_handler(
             # Never answer 2xx for a script that did not run: Jamf Pro
             # records delivery status, and a 200 here is what made a dead
             # automation indistinguishable from a working one.
-            return {"webhook": f"{webhook_name}", "error": str(err)}, 500
+            return {
+                "webhook": f"{webhook_name}",
+                "error": str(err),
+            }, err.status
         if raw is None:
             logthis.error(
                 f"Webhook {webhook_name} disappeared between validation "

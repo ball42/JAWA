@@ -76,7 +76,7 @@ def test_enabling_creates_a_selfserve_record_that_fires(
     calls = []
 
     class P:
-        def __init__(self, args, stdout=None, stderr=None):
+        def __init__(self, args, stdout=None, stderr=None, **kwargs):
             calls.append(args)
             self.stdout = io.BytesIO(b"ok\n")
 
