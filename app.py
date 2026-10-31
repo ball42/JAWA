@@ -144,6 +144,9 @@ def main() -> None:
     logthis.info(f"JAWA initializing...\n Sandcrawler home:  {base_dir}")
     try:
         environment_setup(base_dir)
+        from bin import data_store
+
+        data_store.secure_private_files()
         register_blueprints()
         app.secret_key = load_secret_key(base_dir)
         app.permanent_session_lifetime = timedelta(minutes=15)
