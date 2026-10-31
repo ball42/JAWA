@@ -158,15 +158,11 @@ def _install_package(
     B14 mistake, where the trigger becomes invisible and uneditable.
     """
     script = package["script"]
-    _ensure_scripts_dir()
     safe_filename = secure_filename(script["filename"])
-    script_path = os.path.join(SCRIPTS_DIR, safe_filename)
-    with open(script_path, "w", encoding="utf-8") as f:
-        f.write(_retarget_shebang(script["content"]))
-    # Owner-only, and the same reason as _write_script: an imported
-    # package can carry credential values, and the explicit chmod
-    # overrides the operator's umask.
-    os.chmod(script_path, 0o700)
+    # A unique <name>_<n>.py, never the package's own file name: that name
+    # comes from a shared file and could land on another automation's
+    # script. _write_script also sets owner-only permissions.
+    script_path = _write_script(package["name"], script["content"])
 
     auth = auth_fields or {
         "webhook_username": "null",
@@ -1028,6 +1024,19 @@ def import_template() -> Union[Response, Dict[str, Any]]:
             )
         )
 
+    # Both branches need a free name: the receiver stops at the first
+    # entry with a given name, so a second one could never be reached.
+    if data_store.get_webhook_by_name(package["name"]):
+        return redirect(
+            url_for(
+                "error",
+                error="Error",
+                error_message=(
+                    f'The name "{package["name"]}" is already in use.'
+                ),
+            )
+        )
+
     # Default-on, and read as "absent means cleared": an unchecked box
     # posts nothing at all. These packages are predicated on Jamf Pro
     # events, so registering the webhook in Jamf -- the coupling the
@@ -1076,10 +1085,6 @@ def import_template() -> Union[Response, Dict[str, Any]]:
                 f"Jamf Pro webhook. {err.message} Fix the name in the "
                 f"package file, or clear the Jamf Pro box to install the "
                 f"script locally only.",
-            )
-        if data_store.get_webhook_by_name(webhook_name):
-            raise AutomationError(
-                "Error", f'The name "{webhook_name}" is already in use.'
             )
 
         server_address = get_jawa_address()
