@@ -614,3 +614,42 @@ def test_edit_without_the_box_keeps_the_token(logged_in_client, jawa_env):
         content_type="multipart/form-data",
     )
     assert data_store.get_webhook_by_name("reset-ipad")["token"] == old
+
+
+def test_edit_creates_a_missing_profile(
+    logged_in_client, jawa_env, profile_jamf
+):
+    profile_jamf.status = 400
+    logged_in_client.post(
+        "/automations/selfserve/new",
+        data=_create_form(create_profile="on"),
+        content_type="multipart/form-data",
+    )
+    assert data_store.get_webhook_by_name("reset-ipad")[
+        "profile_status"
+    ] == "failed"
+    page = logged_in_client.get(
+        "/automations/selfserve/reset-ipad/edit"
+    ).get_data(as_text=True)
+    assert 'name="create_profile"' in page
+
+    profile_jamf.status = 201
+    profile_jamf.posts.clear()
+    form = _create_form(create_profile="on")
+    del form["new_file"]
+    logged_in_client.post(
+        "/automations/selfserve/reset-ipad/edit",
+        data=dict(form, button_choice="Save"),
+        content_type="multipart/form-data",
+    )
+    assert any(
+        "/mobiledeviceconfigurationprofiles/id/0" in url
+        for url, _ in profile_jamf.posts
+    )
+    entry = data_store.get_webhook_by_name("reset-ipad")
+    assert entry["jamf_id"] == "55"
+    assert entry["profile_status"] == "created"
+    page = logged_in_client.get(
+        "/automations/selfserve/reset-ipad/edit"
+    ).get_data(as_text=True)
+    assert 'name="create_profile"' not in page

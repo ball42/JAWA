@@ -700,6 +700,22 @@ class SelfServeHandler(AutomationHandler):
                     "update it by hand with this URL:"
                 )
                 custom_header = {"URL": profile_url}
+        elif family == "mobile" and form.get("create_profile") == "on":
+            # The profile failed or was skipped at create time; after the
+            # cause is fixed, one save creates it instead of a hand build.
+            register_profile(existing, session_data, True)
+            if existing["profile_status"] == "failed":
+                extra_notice = (
+                    "Jamf Pro did not accept the web clip profile; create "
+                    "it by hand with this URL:"
+                )
+                custom_header = {
+                    "URL": service_url(
+                        get_jawa_address() or "",
+                        existing["name"],
+                        existing["token"],
+                    )
+                }
 
         save_all_webhooks(all_items)
         logthis.info(
