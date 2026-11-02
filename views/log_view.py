@@ -27,6 +27,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import os
+from collections import deque
 from datetime import datetime
 from typing import Union
 
@@ -64,8 +65,8 @@ LOG_TAIL_LINES = 500
 def _read_recent_logs() -> list:
     """Read the last LOG_TAIL_LINES lines from the log file."""
     with open(log_file, "r") as fin:
-        lines = [line.replace("\n", "") for line in fin.readlines()]
-    return lines[-LOG_TAIL_LINES:]
+        tail = deque(fin, maxlen=LOG_TAIL_LINES)
+    return [line.replace("\n", "") for line in tail]
 
 
 @blueprint.route("/log/home.html", methods=["GET"])

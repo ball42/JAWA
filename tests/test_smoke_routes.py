@@ -144,3 +144,16 @@ def test_healthz_reports_missing_scripts_dir(client, jawa_env):
     assert resp.status_code == 503
     assert resp.get_json()["check"] == "scripts"
 
+
+def test_log_page_returns_last_500_lines(logged_in_client, jawa_env):
+    lines = [f"entry-{n:05d}" for n in range(1, 10001)]
+    jawa_env.log_file.write_text("\n".join(lines) + "\n")
+    body = logged_in_client.get("/log/view").get_data(as_text=True)
+    assert "entry-09500" not in body
+    positions = [body.index(f"entry-{n:05d}") for n in (9501, 9750, 10000)]
+    assert positions == sorted(positions)
+    import inspect
+
+    from views import log_view
+
+    assert "readlines" not in inspect.getsource(log_view._read_recent_logs)
