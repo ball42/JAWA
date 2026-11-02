@@ -92,6 +92,8 @@ app.config.update(
 def _session_heartbeat() -> None:
     from bin import data_store
 
+    if request.endpoint == "healthz":
+        return
     minutes = _resolve_session_timeout(data_store.get_server_config())
     app.permanent_session_lifetime = timedelta(minutes=minutes)
     session.modified = True
@@ -489,6 +491,26 @@ def cleanup() -> Union[Response, Dict[str, Any]]:
 @app.route("/")
 def home() -> Union[Response, str]:
     return load_home()
+
+
+@app.route("/healthz")
+def healthz() -> Tuple[Dict[str, str], int]:
+    """Unauthenticated health check for uptime monitors.
+
+    Reads the stores directly instead of through data_store, whose readers
+    create missing files, so a probe never writes to disk or the log.
+    """
+    from bin import data_store
+
+    for path in (data_store.WEBHOOKS_FILE, data_store.CRON_FILE):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                json.load(f)
+        except (OSError, ValueError):
+            return {"status": "fail", "check": os.path.basename(path)}, 503
+    if not os.path.isdir(data_store.SCRIPTS_DIR):
+        return {"status": "fail", "check": "scripts"}, 503
+    return {"status": "ok"}, 200
 
 
 @app.route("/success", methods=["GET", "POST"])
