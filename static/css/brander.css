@@ -13,7 +13,16 @@
 .brander-upload { display: flex; gap: var(--rb-space-2); align-items: center; }
 .brander-upload .rb-input { flex: 1; padding-top: calc(var(--rb-space-1) * 2); }
 
-.brander-template { margin-bottom: var(--rb-space-5); }
+.brander-upload-form { margin-bottom: var(--rb-space-6); text-align: left; }
+.rb-empty .brander-upload-form { margin-bottom: 0; }
+
+.brander-template { margin-bottom: var(--rb-space-5); display: flex; gap: var(--rb-space-6); align-items: flex-start; }
+.brander-template__body { flex: 1; min-width: 0; }
+.brander-thumb {
+    flex: none; width: 120px; height: auto; max-height: 240px; object-fit: contain;
+    border: 1px solid var(--roster-card-border); border-radius: var(--rb-radius-md);
+    background: var(--roster-gray-100);
+}
 .brander-template .rb-card__title { text-align: left; }
 .brander-template .rb-table { margin-bottom: var(--rb-space-3); }
 .brander-template .rb-table td, .brander-template .rb-table th { padding: var(--rb-space-2) var(--rb-space-3); height: auto; }
@@ -21,8 +30,6 @@
     font-family: var(--roster-font-mono); background: var(--roster-gray-100);
     padding: 0 var(--rb-space-1); border-radius: var(--rb-radius-sm);
 }
-.brander-active { font-weight: 600; }
-.brander-active::before { content: "\2713 "; }
 .brander-problems li::before { content: "Error: "; font-weight: 600; }
 .brander-warnings li::before { content: "\26A0  Warning: "; font-weight: 600; }
 .brander-fit { padding-left: 1.1rem; margin-bottom: .75rem; }
@@ -38,4 +45,5 @@
 
 @media (max-width: 800px) {
     .brander-preview-grid, .brander-preview-form { grid-template-columns: 1fr; }
+    .brander-template { flex-direction: column; }
 }

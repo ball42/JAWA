@@ -27,7 +27,7 @@
             <div class="rb-field">
                 <label for="template" class="rb-label">Template</label>
                 <select class="rb-input" id="template" name="template" required>
-                    {% for c in choices %}<option value="{{ c }}" {% if form and form.template == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                    {% for value, label in choices %}<option value="{{ value }}" {% if form and form.template == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
                 </select>
             </div>
             <div class="rb-field">
