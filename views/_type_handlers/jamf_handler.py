@@ -249,6 +249,10 @@ def jamf_status(automation: Dict, session_data: Dict) -> Dict[str, Any]:
 class JamfHandler(AutomationHandler):
     tag = "jamfpro"
     display_name = "Jamf Pro"
+    summary = (
+        "Runs a script when Jamf Pro sends an event, for example a device "
+        "enrolls."
+    )
     badge_class = "badge-extensions"
     icon = "webhook.png"
     supports_edit = True

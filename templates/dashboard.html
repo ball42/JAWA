@@ -38,8 +38,8 @@
     title="JAWA Dashboard",
     subtitle=(total_webhooks or '0')|string ~ " webhooks &middot; " ~ (total_cron or '0')|string ~ " timed automations &middot; ",
     subtitle_link_url=session.get('url', ''),
-    create_url="/automations/jamfpro/new",
-    create_label="Create Webhook",
+    create_url="/automations/new",
+    create_label="Create automation",
     secondary_url="/templates",
     secondary_label="Browse Templates"
 ) }}

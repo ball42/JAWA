@@ -48,6 +48,7 @@ OKTA_VERIFICATION_FILE = os.path.abspath(
 class OktaHandler(AutomationHandler):
     tag = "okta"
     display_name = "Okta"
+    summary = "Runs a script when Okta sends an event hook."
     badge_class = "badge-observability"
     icon = "webhook.png"
     supports_edit = False

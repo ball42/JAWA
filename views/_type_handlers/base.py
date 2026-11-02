@@ -78,6 +78,9 @@ class AutomationHandler(ABC):
 
     tag: str = ""
     display_name: str = ""
+    # One line on what starts this kind of automation, for the
+    # "Create automation" chooser.
+    summary: str = ""
     badge_class: str = ""
     icon: str = "webhook.png"
     supports_edit: bool = True

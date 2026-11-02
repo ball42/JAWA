@@ -72,6 +72,7 @@ def auth_label(automation: Dict) -> str:
 class CustomHandler(AutomationHandler):
     tag = "custom"
     display_name = "Custom"
+    summary = "Gives you a URL that any system can call to run a script."
     badge_class = "badge-provisioning"
     icon = "webhook.png"
     supports_edit = True

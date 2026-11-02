@@ -187,6 +187,7 @@ def _apply_frequency(job: Any, frequency: str, form: Any) -> str:
 class CronHandler(AutomationHandler):
     tag = "cron"
     display_name = "Timed Automation"
+    summary = "Runs a script on a schedule."
     badge_class = "badge-observability"
     icon = "timed_automation.png"
     supports_edit = True
