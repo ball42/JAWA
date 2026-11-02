@@ -36,7 +36,9 @@ that query string; only the page's POST spawns the script. See the
 Self-serve section of README.md for the URL and payload contract.
 """
 
+import functools
 import hmac
+import os
 import re
 import threading
 import time
@@ -44,6 +46,7 @@ from urllib.parse import unquote_plus
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from flask import Blueprint, render_template, request
+from markupsafe import Markup
 
 from bin import data_store, logger
 from webhook.jawa_receiver import ScriptExecutionError, script_results
@@ -235,10 +238,36 @@ def branding_name() -> str:
     return str(data_store.get_server_config().get("brand") or "")
 
 
+ICONS_SVG = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "static", "css", "vendor", "icons.svg",
+)
+STATUS_ICONS = (
+    "circle-check", "triangle-exclamation", "circle-exclamation", "circle-info"
+)
+
+
+@functools.lru_cache(maxsize=1)
+def status_icon_symbols() -> Markup:
+    """The status icons' <symbol> elements from the vendored icons.svg.
+
+    Device pages carry them inline, so their icons also show inside the
+    console's sandboxed preview frame, which cannot load the sprite file.
+    """
+    with open(ICONS_SVG, encoding="utf-8") as handle:
+        sprite = handle.read()
+    found = [
+        re.search(rf'<symbol id="{name}".*?</symbol>', sprite, re.S)
+        for name in STATUS_ICONS
+    ]
+    return Markup("".join(match.group(0) for match in found if match))
+
+
 def render_device_page(template: str, **context: Any):
     """Render a device-facing page with the organisation's branding."""
     return render_template(
-        template, brand_name=branding_name(), **context
+        template, brand_name=branding_name(),
+        icon_symbols=status_icon_symbols(), **context
     )
 
 

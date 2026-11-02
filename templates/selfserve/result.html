@@ -1,15 +1,16 @@
 {% extends "selfserve/_layout.html" %}
+{% import "vendor/roster-macros.html" as rb %}
 
 {% block title %}{{ strings.page_title }}{% endblock %}
 
 {% block card %}
 <h1>{{ strings.page_title }}</h1>
 {% if cooldown %}
-<p class="ss-cooldown">{{ cooldown }}</p>
+{{ rb.alert("warn", body=cooldown, icons_url="") }}
 {% elif succeeded %}
-<p class="ss-ok">{{ strings.success_message }}</p>
+{{ rb.alert("ok", body=strings.success_message, icons_url="") }}
 {% else %}
-<p class="ss-failed">{{ strings.failure_message }}</p>
+{{ rb.alert("danger", body=strings.failure_message, icons_url="") }}
 {% endif %}
 {# A full-screen web clip has no reload or back button of its own,
    so offer the way back to the start page. #}
@@ -23,7 +24,7 @@
     <input type="hidden" name="{{ key }}" value="{{ value }}">
     {% endfor %}
     {% endif %}
-    <button type="submit" class="ss-btn ss-btn-secondary"
+    <button type="submit" class="rb-btn rb-btn--lg rb-btn--outline"
             {% if preview %}disabled{% endif %}>
         Back to start
     </button>

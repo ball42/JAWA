@@ -1,27 +1,16 @@
 /* Device-facing self-serve pages. Standalone: does not load the
-   console stylesheet, so none of its navigation or footer appears. */
-:root {
-    --ss-bg: #f9fafb;
-    --ss-card: #ffffff;
-    --ss-text: #111827;
-    --ss-muted: #4b5563;
-    --ss-border: #e5e7eb;
-    --ss-accent: #1d4ed8;
-    --ss-accent-text: #ffffff;
-    --ss-ok: #166534;
-    --ss-fail: #b91c1c;
-    --ss-warn: #92400e;
-}
+   console stylesheet, so none of its navigation or footer appears.
+   Colours, type and shape come from the vendored roster files
+   (vendor/roster-web.css and vendor/roster-html.css), loaded first. */
 
 * { box-sizing: border-box; }
 
 html, body { margin: 0; min-height: 100%; }
 
 body {
-    background: var(--ss-bg);
-    color: var(--ss-text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        "Helvetica Neue", Arial, sans-serif;
+    background: var(--rb-surface);
+    color: var(--rb-text);
+    font-family: var(--roster-font-ui);
     font-size: 1.0625rem;
     line-height: 1.5;
     padding: env(safe-area-inset-top) env(safe-area-inset-right)
@@ -43,61 +32,39 @@ body {
     gap: 0.6rem;
     margin-bottom: 1rem;
     font-weight: 600;
-    color: var(--ss-muted);
+    color: var(--rb-text-soft);
 }
 
-.ss-brand img { width: 36px; height: 36px; border-radius: 8px; }
+.ss-brand img { width: 36px; height: 36px; border-radius: var(--rb-radius-lg); }
 
 .ss-card {
     width: 100%;
     max-width: 480px;
-    background: var(--ss-card);
-    border: 1px solid var(--ss-border);
-    border-radius: 14px;
+    background: var(--roster-card-bg);
+    color: var(--roster-card-text);
+    border: 1px solid var(--roster-card-border);
+    border-radius: var(--rb-radius-xl);
     padding: 1.75rem 1.5rem;
     text-align: center;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--roster-elevation-raised);
 }
 
 .ss-card h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 0.75rem; }
-.ss-card p { margin: 0 0 0.75rem; color: var(--ss-muted); }
+.ss-card p { margin: 0 0 0.75rem; color: var(--rb-text-soft); }
 .ss-card .ss-detail { font-size: 1rem; }
 
 .ss-icon { width: 48px; height: 48px; margin: 0 auto 0.75rem; display: block; }
-.ss-icon-error { color: var(--ss-fail); }
-.ss-icon-info { color: var(--ss-warn); }
+.ss-icon-error { color: var(--rb-status-danger); }
+.ss-icon-info { color: var(--rb-status-warn); }
 
-.ss-ok { color: var(--ss-ok); font-weight: 600; }
-.ss-failed { color: var(--ss-fail); font-weight: 600; }
-.ss-cooldown { color: var(--ss-warn); font-weight: 600; }
+/* Result and cooldown messages are rb-alert boxes: icon, then text. */
+.ss-card .rb-alert { margin: 0 0 0.75rem; text-align: left; font-size: 1rem; }
+.ss-card .rb-alert__body { font-weight: 600; }
 
 .ss-actions { margin-top: 1.5rem; }
 
-.ss-btn {
-    appearance: none;
-    border: 0;
-    border-radius: 10px;
-    background: var(--ss-accent);
-    color: var(--ss-accent-text);
-    font: inherit;
-    font-weight: 600;
-    min-width: 12rem;
-    min-height: 3rem;
-    padding: 0.6rem 1.5rem;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-}
-
-.ss-btn:disabled { opacity: 0.6; cursor: default; }
-
-.ss-btn-secondary {
-    background: transparent;
-    color: var(--ss-accent);
-    border: 2px solid var(--ss-accent);
-}
+/* The buttons are rb-btn rb-btn--lg; keep them a large touch target. */
+.ss-actions .rb-btn { min-width: 12rem; min-height: 3rem; font-size: 1rem; font-weight: 600; }
 
 .ss-status { min-height: 1.5rem; margin: 0.75rem 0 0; font-size: 1rem; }
 

@@ -113,6 +113,43 @@ def upload() -> Union[Response, str, tuple]:
                                fit=_fit(result["slug"], result["version"])))
 
 
+# A built-in sample device for store thumbnails: made-up values, so a
+# thumbnail never shows a real device's record.
+SAMPLE_DEVICE = {
+    "general": {"id": 1, "device_name": "Sample iPad", "serial_number": "XXXX0000",
+                "asset_tag": "A-0001", "model_identifier": "iPad13,18"},
+    "location": {"building": "Main building"},
+}
+THUMBNAIL_PX = 240
+
+
+@blueprint.route("/brander/templates/<slug>/thumbnail.png")
+@login_required
+def thumbnail(slug: str) -> Union[Response, tuple]:
+    """The active version rendered for the sample device, at most
+    THUMBNAIL_PX on its long side. 404 when there is nothing to show."""
+    path = brander_store.active_template_path(session.get("url", ""), slug)
+    if not path:
+        return "No active version.", 404
+    try:
+        with open(path, encoding="utf-8") as handle:
+            template = json.load(handle)
+        wallrender = brander_store._wallrender()
+        values = brander_values.build_values(SAMPLE_DEVICE, template)
+        image = wallrender.render(template, values,
+                                  _folder_assets([os.path.dirname(path), BRANDER_ASSETS_DIR]))
+    except Exception as err:  # noqa: BLE001 -- a bad stored template must not 500 the page
+        logthis.info(f"Thumbnail for Brander template {slug} failed: {type(err).__name__}")
+        return "The template could not be rendered.", 422
+    image.thumbnail((THUMBNAIL_PX, THUMBNAIL_PX))
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    buffer.seek(0)
+    resp = send_file(buffer, mimetype="image/png")
+    resp.headers["Cache-Control"] = "private, max-age=300"
+    return resp
+
+
 @blueprint.route("/brander/templates/<slug>/activate", methods=["POST"])
 @login_required
 def activate(slug: str) -> Union[Response, str, tuple]:
@@ -150,14 +187,45 @@ def _jamf_get(path: str) -> requests.Response:
     )
 
 
-def preview_choices() -> List[str]:
-    stored = [f"store:{t['slug']}" for t in brander_store.list_templates(session.get("url", ""))]
+def preview_options() -> List[Tuple[str, str]]:
+    """(value, label) for the preview's template picker: stored templates
+    and shipped files by their display name, store sets by their parts."""
+    stored = brander_store.list_templates(session.get("url", ""))
+    names = {t["slug"]: t.get("name") or t["slug"] for t in stored}
+    options = [(f"store:{t['slug']}", f"{names[t['slug']]} (store)") for t in stored]
+    sets = sorted({path.strip() for _, path in _brander_templates()
+                   if path.strip().startswith("store:") and "=" in path})
+    for spec in sets:
+        try:
+            entries = brander_store.store_set(spec[len("store:"):]) or {}
+        except brander_store.StoreError:
+            entries = {}
+        parts = ", ".join(f"{key}: {names.get(slug, slug)}" for key, slug in entries.items())
+        options.append((spec, f"Store set: {parts}" if parts else spec))
     shipped = sorted(
         name for name in os.listdir(BRANDER_ASSETS_DIR) if name.endswith(".json")
     ) if os.path.isdir(BRANDER_ASSETS_DIR) else []
-    sets = sorted({path.strip() for _, path in _brander_templates()
-                   if path.strip().startswith("store:") and "=" in path})
-    return stored + sets + shipped
+    for name in shipped:
+        options.append((name, f"{_shipped_label(name)} (shipped)"))
+    return options
+
+
+def _shipped_label(name: str) -> str:
+    """A shipped file's template name, or its file name when it has none."""
+    try:
+        with open(os.path.join(BRANDER_ASSETS_DIR, name), encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return name
+    if isinstance(data, dict) and isinstance(data.get("name"), str) and data["name"].strip():
+        return data["name"].strip()
+    if isinstance(data, dict) and "templates" in data:
+        return f"Template set {name.rsplit('.', 1)[0]}"
+    return name
+
+
+def preview_choices() -> List[str]:
+    return [value for value, _ in preview_options()]
 
 
 def _template_file(choice: str, device: Dict[str, Any]) -> Tuple[Optional[str], str]:
@@ -223,7 +291,7 @@ def _device_fit(wallrender, template, size, model_identifier) -> Dict[str, Any]:
 
 
 def _preview_page(status=200, **context) -> tuple:
-    return render_template("brander/preview.html", choices=preview_choices(),
+    return render_template("brander/preview.html", choices=preview_options(),
                            **context), status
 
 
