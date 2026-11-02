@@ -562,6 +562,10 @@ def _apply_brander_settings(script: str, form: Mapping[str, Any]) -> str:
 class SelfServeHandler(AutomationHandler):
     tag = "selfserve"
     display_name = "Self-Serve"
+    summary = (
+        "Puts a button on managed iPads and iPhones that runs a script for "
+        "that device."
+    )
     badge_class = "badge-provisioning"
     icon = "webhook.png"
     supports_edit = True

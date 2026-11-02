@@ -697,12 +697,12 @@ install() {
   /bin/echo -ne '[############            ](60%) Cloning the JAWA project from GitHub... '
   /bin/echo '[############            ](60%) Cloning the JAWA project from GitHub... ' >>/var/log/jawaInstall.log 2>&1
 
-  git clone --branch "$branch" https://github.com/jamf/JAWA.git jawa >>/var/log/jawaInstall.log 2>&1 & spinner $! ""
+  git clone --branch "$branch" "$repoUrl" jawa >>/var/log/jawaInstall.log 2>&1 & spinner $! ""
   cloneStatus=$?
   # spinner propagates the background job's exit code; also confirm the clone actually landed
   if [ "$cloneStatus" -ne 0 ] || [ ! -d "$installDir/jawa/.git" ]; then
     /usr/bin/clear
-    /bin/echo "Unable to clone the JAWA project (branch '$branch') from GitHub."
+    /bin/echo "Unable to clone the JAWA project (branch '$branch') from $repoUrl."
     /bin/echo "Check your network connection and that the branch exists, then see /var/log/jawaInstall.log for details."
     /bin/echo "Unable to clone the JAWA project (branch '$branch') from GitHub." >>/var/log/jawaInstall.log 2>&1
     exit 2
@@ -857,7 +857,7 @@ F2BEOF
   cat <<EOF >>/etc/systemd/system/jawa.service
 [Unit]
 Description=Jamf Automation & Webhooks Assistant
-Documentation=https://github.com/jamf/JAWA
+Documentation=https://github.com/ball42/JAWA
 After=network.target
 
 [Service]
@@ -1441,6 +1441,10 @@ while [[ $# -gt 0 ]]; do
       branch="$2"
       shift 2  # Shift to the next argument
       ;;
+    r|repo)
+      repoUrl="$2"
+      shift 2
+      ;;
     *)
       # Handle unknown options or arguments
       echo "Unknown option: $1"
@@ -1452,6 +1456,12 @@ done
 # If no branch argument was provided, default to "main" (production install path)
 if [ -z "$branch" ]; then
   branch="main"
+fi
+
+# Clone from the ball42 fork, which carries the self-serve automation type
+# (develop branch). Pass "repo <git url>" to install from another repository.
+if [ -z "$repoUrl" ]; then
+  repoUrl="https://github.com/ball42/JAWA.git"
 fi
 
 

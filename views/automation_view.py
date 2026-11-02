@@ -135,6 +135,13 @@ def list_all() -> Union[Response, str]:
     )
 
 
+@blueprint.route("/automations/new")
+@login_required
+def choose_type() -> str:
+    """Pick which kind of automation to create."""
+    return render_template("automations/choose.html", handlers=HANDLERS)
+
+
 @blueprint.route("/automations/<auto_type>")
 @login_required
 def list_type(auto_type: str) -> Union[Response, str]:

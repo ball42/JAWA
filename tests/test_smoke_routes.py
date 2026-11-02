@@ -157,3 +157,26 @@ def test_log_page_returns_last_500_lines(logged_in_client, jawa_env):
     from views import log_view
 
     assert "readlines" not in inspect.getsource(log_view._read_recent_logs)
+
+
+def test_create_automation_page_lists_every_type(logged_in_client):
+    from views._type_handlers import HANDLERS
+
+    resp = logged_in_client.get("/automations/new")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert len(HANDLERS) == 5
+    for tag, handler in HANDLERS.items():
+        assert handler.display_name in body
+        assert handler.summary and handler.summary in body
+        assert f'href="/automations/{tag}/new"' in body
+
+
+def test_dashboard_primary_button_opens_the_chooser(logged_in_client):
+    import re
+
+    body = logged_in_client.get("/dashboard").get_data(as_text=True)
+    primary = re.search(
+        r'<a href="([^"]*)" class="btn btn-hero-primary">([^<]*)</a>', body
+    )
+    assert primary.groups() == ("/automations/new", "Create automation")

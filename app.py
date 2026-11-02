@@ -149,6 +149,9 @@ def main() -> None:
         from bin import data_store
 
         data_store.secure_private_files()
+        from views._type_handlers import cron_handler
+
+        cron_handler.migrate_cron_commands()
         register_blueprints()
         app.secret_key = load_secret_key(base_dir)
         app.permanent_session_lifetime = timedelta(minutes=15)

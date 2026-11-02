@@ -217,6 +217,10 @@ def _credential_supplies(
 TOKEN_PREFIX = "__JAWA_"
 
 
+# Matches the default int/str digit limit of Python 3.11 and later.
+_MAX_NUMBER_DIGITS = 4300
+
+
 def _numeric_literal(value: str, param: Dict[str, Any]) -> str:
     """Validate a numeric config value and render it as a literal.
 
@@ -236,6 +240,14 @@ def _numeric_literal(value: str, param: Dict[str, Any]) -> str:
         raise AutomationError(
             "Invalid Configuration",
             f"{label} must be an ASCII number. Got: {value}",
+        )
+    # Bound the size before converting. Python 3.11+ refuses int() on
+    # strings past ~4300 digits, but older versions convert them, so the
+    # check is explicit here to give the same result on every version.
+    if sum(char.isdigit() for char in text) > _MAX_NUMBER_DIGITS:
+        raise AutomationError(
+            "Invalid Configuration",
+            f"{label} has too many digits (limit {_MAX_NUMBER_DIGITS}).",
         )
     try:
         number = int(text)
