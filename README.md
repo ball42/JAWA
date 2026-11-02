@@ -199,7 +199,7 @@ import sys
 event_data = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
 ```
 
-Timed automations run under the system's cron, so a script's output and exit status are handled by cron (for example, in the host's mail/syslog), not captured in the JAWA log.
+Timed automations run under the system's cron. Cron calls `bin/run_cron.py <name>`, which runs your script, writes each line of its output to the JAWA log as `<name> - <line>`, and logs a non-zero exit as an error. The runner exits with your script's exit code. When JAWA starts, it updates timed automations made by older versions to use the runner.
 
 ### Self-serve automations (web clip)
 

@@ -27,6 +27,9 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import getpass
+import os
+import shlex
+import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,6 +37,7 @@ from crontab import CronTab
 
 from bin import logger
 from bin.data_store import (
+    get_all_crons,
     get_time_data,
     save_script,
     save_all_crons,
@@ -52,6 +56,54 @@ def _get_crontab() -> CronTab:
             f"Error accessing crontab for {getpass.getuser()} - {err}"
         )
         raise AutomationError("Crontab Error", str(err))
+
+
+RUN_CRON = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "bin", "run_cron.py")
+)
+
+
+def cron_command(name: str) -> str:
+    """The crontab command for timed automation ``name``.
+
+    Cron runs bin/run_cron.py under JAWA's own interpreter (the venv the
+    service runs in), which runs the script and writes its output and
+    exit status to the JAWA log.
+    """
+    return " ".join(
+        shlex.quote(part) for part in (sys.executable, RUN_CRON, name)
+    )
+
+
+def migrate_cron_commands() -> int:
+    """Point existing JAWA crontab lines at bin/run_cron.py.
+
+    Lines written before the runner existed call the script directly, so
+    their output never reaches the JAWA log. A line is JAWA's when its
+    comment is the name of an entry in cron.json. Returns the number of
+    lines changed. Never raises: a host without a usable crontab must
+    still start.
+    """
+    try:
+        names = {entry.get("name") for entry in get_all_crons()}
+        cron = CronTab(user=True)
+        changed = 0
+        for job in cron:
+            if job.comment in names:
+                command = cron_command(job.comment)
+                if job.command != command:
+                    job.command = command
+                    changed += 1
+        if changed:
+            cron.write()
+            logthis.info(
+                f"Updated {changed} timed automation(s) to log through "
+                f"run_cron.py"
+            )
+        return changed
+    except Exception as err:
+        logthis.warning(f"Could not update timed automation commands: {err}")
+        return 0
 
 
 PRESET_FREQUENCIES = ("everyhour", "everyday", "everyweek", "everymonth")
@@ -171,7 +223,7 @@ class CronHandler(AutomationHandler):
 
         # Create crontab entry
         cron = _get_crontab()
-        job = cron.new(command=script_path, comment=cron_name)
+        job = cron.new(command=cron_command(cron_name), comment=cron_name)
         display_freq = _apply_frequency(job, frequency, form)
         cron.write()
 
@@ -219,8 +271,6 @@ class CronHandler(AutomationHandler):
         if files.get("script") and files["script"].filename:
             script_path = save_script(files["script"], f"cron_{new_name}", "_")
             existing["script"] = script_path
-        else:
-            script_path = existing.get("script", "")
 
         # Update crontab
         cron = _get_crontab()
@@ -228,7 +278,7 @@ class CronHandler(AutomationHandler):
 
         for job in cron:
             if job.comment == name:
-                job.command = script_path
+                job.command = cron_command(new_name)
                 job.comment = new_name
                 if frequency_change:
                     display_freq = _apply_frequency(job, frequency, form)
