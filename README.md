@@ -132,11 +132,15 @@ Refer to the "JAWA Administrators Guide" in the [current release](https://github
 1. Verify that you meet the server requirements.
 2. Rename the certificate to `jawa.crt` and the private key to `jawa.key`.
 3. Ensure you are in the same directory as your `jawa.crt` and `jawa.key`.
-4. Download and run the JAWA installer:
+4. Download and run the JAWA installer. This installs the `develop` branch of the
+   [ball42/JAWA](https://github.com/ball42/JAWA) fork, which has the self-serve automation type:
 
-      ```bash 
-      curl -O https://raw.githubusercontent.com/jamf/JAWA/main/bin/installer.sh && sudo bash ./installer.sh
-      ``` 
+      ```bash
+      curl -O https://raw.githubusercontent.com/ball42/JAWA/develop/bin/installer.sh && sudo bash ./installer.sh branch develop
+      ```
+
+   The installer clones from the fork by default. To install from another repository, add
+   `repo <git url>` (for example `repo https://github.com/jamf/JAWA.git branch main`).
 
 5. After the installation is complete, go to your FQDN (e.g., https://jawa.company.com) in your web browser to continue with the web-based setup.
 
