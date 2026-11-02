@@ -1,0 +1,41 @@
+/* Brander store and preview pages. Colours, type and the rb-* parts come
+   from the vendored roster files (vendor/roster-web.css and
+   vendor/roster-html.css), loaded first. Only layout lives here. */
+
+.brander-page { max-width: 980px; margin: 2rem auto; font-family: var(--roster-font-ui); }
+.brander-page h1 { margin-bottom: var(--rb-space-2); }
+.brander-page .lead { color: var(--rb-text-soft); }
+.brander-page h2 { text-align: left; }
+.brander-page .rb-alert { margin-bottom: var(--rb-space-4); }
+.brander-page .rb-alert ul { margin: 0; padding-left: var(--rb-space-5); }
+
+.brander-page .rb-input { background: var(--roster-card-bg); }
+.brander-upload { display: flex; gap: var(--rb-space-2); align-items: center; }
+.brander-upload .rb-input { flex: 1; padding-top: calc(var(--rb-space-1) * 2); }
+
+.brander-template { margin-bottom: var(--rb-space-5); }
+.brander-template .rb-card__title { text-align: left; }
+.brander-template .rb-table { margin-bottom: var(--rb-space-3); }
+.brander-template .rb-table td, .brander-template .rb-table th { padding: var(--rb-space-2) var(--rb-space-3); height: auto; }
+.brander-setting {
+    font-family: var(--roster-font-mono); background: var(--roster-gray-100);
+    padding: 0 var(--rb-space-1); border-radius: var(--rb-radius-sm);
+}
+.brander-active { font-weight: 600; }
+.brander-active::before { content: "\2713 "; }
+.brander-problems li::before { content: "Error: "; font-weight: 600; }
+.brander-warnings li::before { content: "\26A0  Warning: "; font-weight: 600; }
+.brander-fit { padding-left: 1.1rem; margin-bottom: .75rem; }
+.brander-fit ul { padding-left: 1.1rem; margin: .15rem 0 .35rem; }
+
+.brander-preview-form { display: grid; grid-template-columns: 2fr 1fr auto; gap: var(--rb-space-3); align-items: end; }
+.brander-preview-form .rb-field { margin-bottom: 0; }
+.brander-preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--rb-space-6); align-items: start; }
+.brander-preview-image img {
+    max-width: 100%; max-height: 70vh;
+    border: 1px solid var(--roster-card-border); border-radius: var(--rb-radius-md);
+}
+
+@media (max-width: 800px) {
+    .brander-preview-grid, .brander-preview-form { grid-template-columns: 1fr; }
+}

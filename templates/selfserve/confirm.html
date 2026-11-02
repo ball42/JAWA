@@ -1,4 +1,5 @@
 {% extends "selfserve/_layout.html" %}
+{% import "vendor/roster-macros.html" as rb %}
 
 {% block title %}{{ strings.page_title }}{% endblock %}
 
@@ -16,9 +17,9 @@
     {% endfor %}
     {% endif %}
     {% if cooldown %}
-    <p class="ss-cooldown">{{ cooldown }}</p>
+    {{ rb.alert("warn", body=cooldown, icons_url="") }}
     {% endif %}
-    <button type="submit" class="ss-btn" id="confirm-button"
+    <button type="submit" class="rb-btn rb-btn--lg" id="confirm-button"
             data-label="{{ strings.confirm_label }}"
             {% if cooldown %}disabled data-cooldown{% elif preview %}disabled{% endif %}>
         <span class="ss-spinner" hidden></span>
