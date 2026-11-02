@@ -12,7 +12,7 @@ Brander pages (`templates/brander/`). The Jamf console pages keep `main.css` and
 ## Licences
 
 - The generated CSS and macros are MIT licensed. They contain design-token values derived from
-  @blakesteve/roster, used under the MIT License. Copyright (c) Blake Ball.
+  @blakesteve/roster, used under the MIT License. Copyright (c) 2026 Blake Ball.
 - `icons.svg` contains icons from Font Awesome Free (@fortawesome/free-solid-svg-icons,
   https://fontawesome.com), Copyright (c) Fonticons, Inc. The icons are licensed under CC BY 4.0
   (https://creativecommons.org/licenses/by/4.0/); see https://fontawesome.com/license/free.
