@@ -105,6 +105,13 @@ installer.
   Okta, WorkDay, etc.)
 - A public DNS entry for the JAWA FQDN
 
+### Health check
+
+`GET /healthz` needs no sign-in and writes nothing to disk or the log, so any uptime monitor can
+poll it. It returns `200` with `{"status": "ok"}` when `data/webhooks.json` and `data/cron.json`
+parse and the `scripts` directory exists. Otherwise it returns `503` and names the failing check,
+for example `{"status": "fail", "check": "webhooks.json"}`.
+
 ### Certificate Requirements:
 
 - Jamf Pro connects to JAWA over HTTPS to send webhooks.  JAWA must present a valid certificate for Jamf Pro to trust the connection. 

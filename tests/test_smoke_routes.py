@@ -122,3 +122,25 @@ def test_main_binds_loopback_by_default(jawa_env, monkeypatch):
     monkeypatch.setenv("JAWA_BIND", "0.0.0.0")
     jawa_app.main()
     assert calls[1]["host"] == "0.0.0.0"
+
+
+def test_healthz(client, jawa_env):
+    before = sorted(p.name for p in jawa_env.data_dir.iterdir())
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"status": "ok"}
+
+    jawa_env.webhooks_file.write_text("{not json")
+    resp = client.get("/healthz")
+    assert resp.status_code == 503
+    assert "webhooks.json" in resp.get_data(as_text=True)
+    assert sorted(p.name for p in jawa_env.data_dir.iterdir()) == before
+    assert "Set-Cookie" not in resp.headers
+
+
+def test_healthz_reports_missing_scripts_dir(client, jawa_env):
+    jawa_env.scripts_dir.rmdir()
+    resp = client.get("/healthz")
+    assert resp.status_code == 503
+    assert resp.get_json()["check"] == "scripts"
+
