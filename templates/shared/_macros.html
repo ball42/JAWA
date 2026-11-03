@@ -220,9 +220,10 @@
 </div>
 {% endmacro %}
 
-{% macro description_field(value="") %}
+{% macro description_field(value="", label=none) %}
+{% if label %}<label class="form-label mt-3" for="description">{{ label }}</label>{% endif %}
 <textarea name="description" rows="3" type="text" placeholder="Description (optional)"
-          class="form-control text-center">{{ value }}</textarea>
+          {% if label %}id="description" {% endif %}class="form-control text-center">{{ value }}</textarea>
 {% endmacro %}
 
 {% macro script_upload(field_name="new_file", required=true) %}
