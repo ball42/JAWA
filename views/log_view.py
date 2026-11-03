@@ -37,6 +37,7 @@ from flask import (
     render_template,
     Response,
     request,
+    jsonify,
     send_file,
     session,
     url_for,
@@ -107,6 +108,14 @@ def log_view() -> Union[Response, str]:
         log=_read_recent_logs(),
         debug_enabled=logger.is_debug_enabled(),
     )
+
+
+@blueprint.route("/log/lines", methods=["GET"])
+def log_lines() -> Union[Response, tuple]:
+    """Recent log lines as JSON, so Follow can update the page in place."""
+    if "username" not in session:
+        return jsonify(error="signed out"), 401
+    return jsonify(lines=_read_recent_logs())
 
 
 @blueprint.route("/log/download")

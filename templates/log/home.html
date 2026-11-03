@@ -238,9 +238,9 @@
                     {% endfor %}
                 {% endif %}
                 </ul>
-                {% if not log %}
+                <div id="logEmpty"{% if log %} hidden{% endif %}>
                 {{ empty_state("No log entries yet. JAWA adds them here as it runs.", icon="log") }}
-                {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -251,11 +251,14 @@
 <script>
 (function() {
     var LOG_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+)( - )([\w.]+)( - )(DEBUG|INFO|WARNING|ERROR|CRITICAL)( - )([\s\S]*)$/;
-    var lines = document.querySelectorAll('.log-line');
+    var list = document.getElementById('logLines');
+    var lines = list.querySelectorAll('.log-line');
     var activeLevel = 'all';
     var searchTerm = '';
 
-    lines.forEach(function(li) {
+    lines.forEach(decorate);
+
+    function decorate(li) {
         var raw = li.getAttribute('data-raw') || li.querySelector('.log-content').textContent;
         var m = raw.match(LOG_RE);
         if (m) {
@@ -278,7 +281,23 @@
         } else {
             li.setAttribute('data-level', 'info');
         }
-    });
+    }
+
+    function buildLine(raw, n) {
+        var li = document.createElement('li');
+        li.className = 'log-line';
+        li.setAttribute('data-raw', raw);
+        var gutter = document.createElement('span');
+        gutter.className = 'log-gutter';
+        gutter.textContent = n;
+        var content = document.createElement('span');
+        content.className = 'log-content';
+        content.textContent = raw;
+        li.appendChild(gutter);
+        li.appendChild(content);
+        decorate(li);
+        return li;
+    }
 
     function esc(s) {
         var d = document.createElement('div');
@@ -352,12 +371,48 @@
     function setFollow(on) {
         following = on;
         followBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        followBtn.textContent = on ? 'Following: refreshes every 10 s' : 'Follow';
+        followBtn.textContent = on ? 'Following: updates every 10 s' : 'Follow';
         clearTimeout(followTimer);
-        if (on) {
-            followTimer = setTimeout(function() { location.reload(); }, FOLLOW_MS);
-        }
+        if (on) scheduleFollow();
         syncUrl();
+    }
+
+    // Follow fetches the newest lines and swaps them into the list in
+    // place: no page reload, so the header, filters and scroll position
+    // stay put. It only jumps to the end if you were already there.
+    function scheduleFollow() {
+        followTimer = setTimeout(pollLines, FOLLOW_MS);
+    }
+
+    function lastRaw() {
+        var last = list.lastElementChild;
+        return last ? last.getAttribute('data-raw') : null;
+    }
+
+    function pollLines() {
+        if (!following) return;
+        if (document.hidden) { scheduleFollow(); return; }
+        fetch('/log/lines', {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+            .then(function(res) {
+                if (res.status === 401) { location.reload(); return null; }
+                return res.ok ? res.json() : null;
+            })
+            .then(function(data) { if (data) renderLines(data.lines || []); })
+            .catch(function() { /* keep the current lines; try again next tick */ })
+            .then(function() { if (following) scheduleFollow(); });
+    }
+
+    function renderLines(raws) {
+        var newest = raws.length ? raws[raws.length - 1] : null;
+        if (raws.length === lines.length && newest === lastRaw()) return;
+        var atEnd = logFrame.scrollHeight - logFrame.scrollTop - logFrame.clientHeight < 24;
+        var frag = document.createDocumentFragment();
+        raws.forEach(function(raw, i) { frag.appendChild(buildLine(raw, i + 1)); });
+        list.replaceChildren(frag);
+        lines = list.querySelectorAll('.log-line');
+        document.getElementById('logEmpty').hidden = lines.length > 0;
+        applyFilters();
+        if (atEnd) scrollToEnd();
     }
 
     followBtn.addEventListener('click', function() { setFollow(!following); });
