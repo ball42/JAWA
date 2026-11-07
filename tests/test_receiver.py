@@ -12,6 +12,8 @@ import subprocess
 
 import pytest
 
+JAMF_URL = "https://jamf.example.test"
+
 
 class RecordingPopen:
     """Stands in for subprocess.Popen and records invocations."""
@@ -529,3 +531,145 @@ def test_script_timeout_defaults_to_two_minutes(monkeypatch):
     assert jawa_receiver.script_timeout() == 7
     monkeypatch.setenv("JAWA_SCRIPT_TIMEOUT", "garbage")
     assert jawa_receiver.script_timeout() == 120
+
+
+# --- Failure alerts -------------------------------------------------------
+
+ALERT_URL = "https://hooks.example.test/services/T000/B000/SECRET"
+
+
+class RecordingPost:
+    """Stands in for requests.post and records every alert it is asked to send."""
+
+    def __init__(self, raises=None):
+        self.calls = []
+        self._raises = raises
+
+    def __call__(self, url, json=None, timeout=None, **kwargs):
+        self.calls.append({"url": url, "json": json, "timeout": timeout})
+        if self._raises is not None:
+            raise self._raises
+
+        class _Resp:
+            status_code = 200
+
+        return _Resp()
+
+
+@pytest.fixture()
+def alert_post(jawa_env, monkeypatch):
+    """Set an alert URL, run alert threads inline, and record POSTs.
+
+    The alert thread is started through jawa_receiver._start_alert_thread,
+    so swapping it for a direct call makes the POST happen before the
+    request returns. Rate-limit state is cleared per test.
+    """
+    from webhook import jawa_receiver
+
+    jawa_receiver._last_alert_at.clear()
+    server = json.loads(jawa_env.server_file.read_text())
+    server["failure_alert_url"] = ALERT_URL
+    jawa_env.server_file.write_text(json.dumps(server))
+
+    def _inline(target, args):
+        target(*args)
+
+    recorder = RecordingPost()
+    monkeypatch.setattr(jawa_receiver, "_start_alert_thread", _inline)
+    monkeypatch.setattr(jawa_receiver.requests, "post", recorder)
+    yield recorder
+    jawa_receiver._last_alert_at.clear()
+
+
+def test_failed_run_posts_one_alert(
+    client, jawa_env, monkeypatch, alert_post
+):
+    _make_webhook(jawa_env)
+    monkeypatch.setattr(
+        subprocess, "Popen", ConfigurablePopen(stdout=b"boom\n", returncode=3)
+    )
+    headers = _basic_auth("hookuser", "hookpass")
+    first = client.post("/hooks/testhook", json=PAYLOAD, headers=headers)
+    second = client.post("/hooks/testhook", json=PAYLOAD, headers=headers)
+
+    # The response is the same as before alerts existed.
+    assert first.status_code == 500
+    assert second.status_code == 500
+    assert len(alert_post.calls) == 1, alert_post.calls
+    call = alert_post.calls[0]
+    assert call["url"] == ALERT_URL
+    assert call["timeout"] == 10
+    assert "testhook" in call["json"]["text"]
+    assert "(exit 3)" in call["json"]["text"]
+
+
+def test_failed_run_without_alert_url_posts_nothing(
+    client, jawa_env, monkeypatch
+):
+    from webhook import jawa_receiver
+
+    jawa_receiver._last_alert_at.clear()
+    recorder = RecordingPost()
+    monkeypatch.setattr(jawa_receiver.requests, "post", recorder)
+    _make_webhook(jawa_env)
+    monkeypatch.setattr(
+        subprocess, "Popen", ConfigurablePopen(stdout=b"boom\n", returncode=1)
+    )
+    resp = client.post(
+        "/hooks/testhook",
+        json=PAYLOAD,
+        headers=_basic_auth("hookuser", "hookpass"),
+    )
+    assert resp.status_code == 500
+    assert recorder.calls == []
+
+
+def test_alert_failure_does_not_change_the_response(
+    client, jawa_env, monkeypatch, alert_post
+):
+    alert_post._raises = ConnectionError("hooks.example.test refused")
+    _make_webhook(jawa_env)
+    monkeypatch.setattr(
+        subprocess, "Popen", ConfigurablePopen(stdout=b"boom\n", returncode=1)
+    )
+    resp = client.post(
+        "/hooks/testhook",
+        json=PAYLOAD,
+        headers=_basic_auth("hookuser", "hookpass"),
+    )
+    assert resp.status_code == 500
+    assert resp.get_json()["error"] == "script exited 1"
+    assert len(alert_post.calls) == 1
+
+
+def test_setup_saves_and_renders_failure_alert_url(
+    logged_in_client, jawa_env
+):
+    resp = logged_in_client.post(
+        "/setup",
+        data={
+            "address": "https://jawa.example.test",
+            "jss-lock": JAMF_URL,
+            "failure_alert_url": f"  {ALERT_URL}  ",
+            "session_timeout_minutes": "15",
+        },
+    )
+    assert resp.status_code == 302
+    saved = json.loads(jawa_env.server_file.read_text())
+    assert saved["failure_alert_url"] == ALERT_URL
+
+    page = logged_in_client.get("/setup").get_data(as_text=True)
+    assert f'value="{ALERT_URL}"' in page
+
+    # An empty field clears it.
+    logged_in_client.post(
+        "/setup",
+        data={
+            "address": "https://jawa.example.test",
+            "jss-lock": JAMF_URL,
+            "failure_alert_url": "",
+        },
+    )
+    assert json.loads(jawa_env.server_file.read_text())[
+        "failure_alert_url"
+    ] == ""
