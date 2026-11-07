@@ -341,6 +341,75 @@ if __name__ == "__main__":
 - **Don't assume JAWA provides a Jamf Pro token** — your script authenticates itself.
 - **On the timed path there is no `sys.argv[1]`** — guard for it if a script serves both.
 
+## Development
+
+### Run JAWA locally
+
+JAWA needs Python 3.9 or later. These commands create a virtual environment and start the app from a checkout. Everything it writes (logs, `data/server.json`, `data/.secret_key`) stays under `data/` in the checkout.
+
+```bash
+python3 -m venv .venv
+```
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+```
+
+```bash
+JAWA_INSECURE_COOKIES=1 JAWA_ALLOW_UNPINNED_LOGIN=1 .venv/bin/python app.py
+```
+
+Browse to `http://127.0.0.1:8000`. Waitress serves plain HTTP, so without nginx in front you need `JAWA_INSECURE_COOKIES=1` for the session cookie to work, and `JAWA_ALLOW_UNPINNED_LOGIN=1` lets you sign in before a Jamf Pro URL is saved. Sign-in still goes to a real Jamf Pro server. Timed automations write to the running user's crontab, so use a throwaway account if you test them. `/healthz` returns `503` until `data/webhooks.json` and a `scripts/` directory exist; this is expected on a fresh checkout.
+
+### Environment variables
+
+| Variable | Effect |
+|---|---|
+| `JAWA_SECRET_KEY` | Session signing key. If unset, `data/.secret_key` is created and used. |
+| `JAWA_BIND` | Address Waitress binds to. Default `127.0.0.1`. |
+| `JAWA_INSECURE_COOKIES` | Set to `1` to allow session cookies over plain HTTP (local development only). |
+| `JAWA_ALLOW_UNPINNED_LOGIN` | Set to `1` to allow sign-in before a Jamf Pro URL is saved (local development only). |
+| `JAWA_SCRIPT_TIMEOUT` | Seconds a webhook script may run before it is stopped. |
+| `JAWA_ALLOW_UNPATCHED_WERKZEUG` | Installer only: allow installation on Python 3.8 (see above). |
+
+### Tests and lint
+
+The suite needs no Jamf Pro server, network access, or root. See [tests/README.md](tests/README.md) for how the fixtures work.
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+```bash
+.venv/bin/ruff check .
+```
+
+`ruff.toml` sets a 79-column line length. `ruff check` passes; `ruff format --check` currently reports unformatted files, so formatting is not enforced.
+
+### How the code is organised
+
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the components, data files, request flows, and the reasons behind the main design choices.
+
+## Operating a JAWA server
+
+On a standard install JAWA lives in `/usr/local/jawa`, runs as the `jawa` user under systemd, and sits behind nginx.
+
+```bash
+sudo systemctl status jawa
+```
+
+```bash
+sudo systemctl restart jawa
+```
+
+```bash
+journalctl -u jawa.service -n 50 --no-pager
+```
+
+The application log is `data/jawa.log` (rotated at 100 MB, ten backups) and the failed-login log is `data/jawa-auth.log`. The installer log is `/var/log/jawaInstall.log`. The Log page in the console shows `jawa.log`.
+
+To back up a server, copy `data/`, `scripts/`, and `resources/` from the install directory. To upgrade, re-run the installer on the server and choose the upgrade option; it backs up your configuration and scripts into a `jawabackup-<timestamp>` directory first. If the console is unreachable but `systemctl status jawa` shows the service running, check nginx with `sudo nginx -t` and `sudo systemctl status nginx`.
+
 ## Planned for future releases
 
 Intended direction, not commitments to a date. Listed here so you can plan around the ones that
