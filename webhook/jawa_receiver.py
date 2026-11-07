@@ -30,6 +30,7 @@ from flask import Blueprint, request
 import hmac
 import json
 import os
+import requests
 import signal
 import subprocess
 import threading
@@ -67,10 +68,13 @@ class ScriptExecutionError(Exception):
     made template webhooks appear to fire for a whole release.
 
     ``output`` holds whatever the script printed before it failed.
+    ``exit_code`` is the script's exit status when it ran and exited
+    non-zero; it stays None when the script never started or timed out.
     """
 
     output: bytes = b""
     status: int = 500
+    exit_code: Optional[int] = None
 
 
 class ScriptTimeoutError(ScriptExecutionError):
@@ -248,6 +252,7 @@ def script_results(webhook_data: JSONType, each_webhook: Dict) -> bytes:
             )
             failure = ScriptExecutionError(f"script exited {return_code}")
             failure.output = output
+            failure.exit_code = return_code
             raise failure
 
         return output
@@ -278,6 +283,70 @@ def custom_output_options(
             send_output = each_webhook.get("output")
             return webhook_tag, send_output
     return None, None
+
+
+# Failure alerts: at most one per automation in this window. Kept in memory,
+# so it resets on restart, which is acceptable for a chat nudge.
+ALERT_INTERVAL_SECONDS = 15 * 60
+_alert_lock = threading.Lock()
+_last_alert_at: Dict[str, float] = {}
+
+
+def _failure_alert_url() -> str:
+    """The chat webhook set on /setup, or "" when none is configured."""
+    try:
+        with open(server_json_file, "r") as fin:
+            data = json.load(fin)
+    except Exception:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("failure_alert_url") or "").strip()
+
+
+def _post_failure_alert(url: str, text: str) -> None:
+    # Runs in a daemon thread. Logs the exception type only: the requests
+    # error text can carry the URL, and the URL is a credential.
+    try:
+        resp = requests.post(url, json={"text": text}, timeout=10)
+        if resp.status_code >= 400:
+            logthis.warning(
+                f"Failure alert was refused with HTTP {resp.status_code}."
+            )
+    except Exception as err:
+        logthis.warning(
+            f"Failure alert could not be sent ({type(err).__name__})."
+        )
+
+
+def _start_alert_thread(target: Any, args: Tuple[Any, ...]) -> None:
+    threading.Thread(
+        target=target, args=args, daemon=True, name="jawa-failure-alert"
+    ).start()
+
+
+def notify_run_failed(webhook_name: str, err: ScriptExecutionError) -> None:
+    """Tell the configured chat webhook that a run failed. Never raises."""
+    try:
+        url = _failure_alert_url()
+        if not url:
+            return
+        now = time.monotonic()
+        with _alert_lock:
+            last = _last_alert_at.get(webhook_name)
+            if last is not None and now - last < ALERT_INTERVAL_SECONDS:
+                return
+            _last_alert_at[webhook_name] = now
+        code = err.exit_code if err.exit_code is not None else "n/a"
+        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        text = (
+            f"JAWA: {webhook_name} failed (exit {code}) at {stamp}"
+        )
+        _start_alert_thread(_post_failure_alert, (url, text))
+    except Exception as alert_err:
+        logthis.warning(
+            f"Failure alert for {webhook_name} was not queued: {alert_err}"
+        )
 
 
 @blueprint.route("/hooks/<webhook_name>", methods=["POST", "GET"])
@@ -340,6 +409,7 @@ def webhook_handler(
             # Never answer 2xx for a script that did not run: Jamf Pro
             # records delivery status, and a 200 here is what made a dead
             # automation indistinguishable from a working one.
+            notify_run_failed(webhook_name, err)
             return {
                 "webhook": f"{webhook_name}",
                 "error": str(err),

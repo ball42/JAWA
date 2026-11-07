@@ -383,6 +383,12 @@ def setup() -> Union[Response, str]:
             new_json["jawa_address"] = server_url
         if jps_url != "":
             new_json["jps_url"] = jps_url
+        if "failure_alert_url" in request.form:
+            # Empty clears the alert. Only saved when the field was posted,
+            # so a save from another form cannot wipe it.
+            new_json["failure_alert_url"] = (
+                request.form.get("failure_alert_url") or ""
+            ).strip()
         if not os.path.isfile(server_json_file):
             with open(server_json_file, "w") as outfile:
                 server_json = {
@@ -439,6 +445,7 @@ def setup() -> Union[Response, str]:
             jawa_url=jawa_url,
             session_timeout=session_timeout,
             allowed_admins="\n".join(server_json.get("allowed_admins") or []),
+            failure_alert_url=server_json.get("failure_alert_url") or "",
             username=session.get("username"),
         )
 
