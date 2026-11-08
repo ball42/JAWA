@@ -296,8 +296,9 @@ def _build_enable_form(slug, **overrides):
     workflow = next(wf for wf in catalog if wf["slug"] == slug)
 
     form = {"webhook_name": slug}
-    is_selfserve = workflow.get("trigger_type") == "selfserve"
-    if not workflow.get("trigger_event") and not is_selfserve:
+    # Self-serve and timed templates have no Jamf event to pick.
+    no_event = workflow.get("trigger_type") in ("selfserve", "cron")
+    if not workflow.get("trigger_event") and not no_event:
         with open(
             os.path.join(REPO_ROOT, "data", "webhook_schemas.json"),
             "r",

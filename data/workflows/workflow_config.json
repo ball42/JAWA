@@ -455,5 +455,73 @@
         ],
         "tags": ["self-serve", "web-clip", "mobile", "wallpaper", "branding"],
         "order": 10
+    },
+    {
+        "slug": "asset-tag-brander",
+        "title": "Brander (Asset Tag Watch)",
+        "description": "Watch every mobile device on a schedule and re-brand one with the Brander when its asset tag or Brander extension attribute changes, so the wallpaper never shows an old tag.",
+        "category": "provisioning",
+        "trigger_type": "cron",
+        "trigger_event": null,
+        "default_schedule": "*/15 * * * *",
+        "script_file": "asset_tag_brander.py",
+        "hook_name": "asset-tag-brander",
+        "api_privileges": [
+            "Read Mobile Devices"
+        ],
+        "config_params": [
+            {
+                "key": "server_url",
+                "label": "Jamf Pro URL",
+                "placeholder": "https://example.jamfcloud.com",
+                "token": "\"__JAWA_SERVER_URL__\"",
+                "type": "text"
+            },
+            {
+                "key": "client_id",
+                "label": "OAuth Client ID",
+                "placeholder": "your-api-client-id",
+                "token": "\"__JAWA_CLIENT_ID__\"",
+                "type": "text"
+            },
+            {
+                "key": "client_secret",
+                "label": "OAuth Client Secret",
+                "placeholder": "your-api-client-secret",
+                "token": "\"__JAWA_CLIENT_SECRET__\"",
+                "type": "password"
+            },
+            {
+                "key": "brander_script",
+                "label": "Brander script path (the installed Brander (Self-Serve) automation's script)",
+                "placeholder": "/usr/local/jawa/scripts/brand-device.py",
+                "default": "/usr/local/jawa/scripts/brand-device.py",
+                "token": "\"__JAWA_BRANDER_SCRIPT__\"",
+                "type": "text"
+            },
+            {
+                "key": "db_path",
+                "label": "State database (SQLite file)",
+                "placeholder": "/usr/local/jawa/data/asset_tag_watch.sqlite",
+                "default": "/usr/local/jawa/data/asset_tag_watch.sqlite",
+                "token": "\"__JAWA_DB_PATH__\"",
+                "type": "text"
+            },
+            {
+                "key": "dry_run",
+                "label": "Dry run (yes or no): yes only reports which devices would be branded",
+                "placeholder": "no",
+                "default": "no",
+                "token": "\"__JAWA_DRY_RUN__\"",
+                "type": "text"
+            }
+        ],
+        "exit_codes": [
+            {"code": 0, "meaning": "Success — every change was branded or settled"},
+            {"code": 1, "meaning": "Could not list mobile devices (nothing stored)"},
+            {"code": 2, "meaning": "At least one brand attempt failed; it is retried on the next run"}
+        ],
+        "tags": ["cron", "mobile", "wallpaper", "branding", "asset-tag"],
+        "order": 11
     }
 ]
