@@ -72,7 +72,7 @@
         {% if wns.has_webhooks %}
         <div class="section-header">
             <h3>Webhooks</h3>
-            <a href="/automations" style="font-size: 0.85rem; color: var(--color-primary);">View all</a>
+            <a href="/automations" class="section-link">View all</a>
         </div>
         <ul class="automation-list">
             {% for tag in webhook_tags %}
@@ -87,7 +87,7 @@
         {% if categorized.get('cron', {}).get('items', []) %}
         <div class="section-header mt-4">
             <h3>Timed Automations</h3>
-            <a href="/automations/cron" style="font-size: 0.85rem; color: var(--color-primary);">View all</a>
+            <a href="/automations/cron" class="section-link">View all</a>
         </div>
         <ul class="automation-list">
             {% for item in categorized.get('cron', {}).get('items', []) %}
