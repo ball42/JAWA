@@ -4,10 +4,10 @@
 {% block content %}
 <div class="container" style="max-width: 750px; padding-top: 2rem;">
     <div class="mb-3">
-        <a href="/templates/{{ workflow.slug }}" style="color: var(--color-primary); font-size: 0.88rem;">&larr; Back to {{ workflow.title }}</a>
+        <a href="/templates/{{ workflow.slug }}" class="back-link">&larr; Back to {{ workflow.title }}</a>
     </div>
 
-    <h2 style="font-size: 1.6rem; text-align: left; letter-spacing: -0.5px; margin-top: 0.5rem;">Enable Template</h2>
+    <h2 class="page-title">Enable Template</h2>
     <p style="color: var(--color-text-secondary); font-size: 0.92rem;">
         {% if workflow.trigger_type == 'selfserve' %}
         Configure and install <strong>{{ workflow.title }}</strong> as a self-serve automation.

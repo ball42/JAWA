@@ -37,7 +37,7 @@
             {% if data.get('items', []) %}
             <div class="section-header {% if not loop.first %}mt-4{% endif %}">
                 <h3>{{ data.handler.display_name }}</h3>
-                <a href="/automations/{{ tag }}" style="font-size: 0.85rem; color: var(--color-primary);">View all</a>
+                <a href="/automations/{{ tag }}" class="section-link">View all</a>
             </div>
             <ul class="automation-list">
                 {% for item in data.get('items', []) %}
