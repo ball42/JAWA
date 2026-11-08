@@ -12,6 +12,8 @@ import subprocess
 
 import pytest
 
+from bin import failure_alert
+
 JAMF_URL = "https://jamf.example.test"
 
 
@@ -576,7 +578,7 @@ def alert_post(jawa_env, monkeypatch):
 
     recorder = RecordingPost()
     monkeypatch.setattr(jawa_receiver, "_start_alert_thread", _inline)
-    monkeypatch.setattr(jawa_receiver.requests, "post", recorder)
+    monkeypatch.setattr(failure_alert.requests, "post", recorder)
     yield recorder
     jawa_receiver._last_alert_at.clear()
 
@@ -610,7 +612,7 @@ def test_failed_run_without_alert_url_posts_nothing(
 
     jawa_receiver._last_alert_at.clear()
     recorder = RecordingPost()
-    monkeypatch.setattr(jawa_receiver.requests, "post", recorder)
+    monkeypatch.setattr(failure_alert.requests, "post", recorder)
     _make_webhook(jawa_env)
     monkeypatch.setattr(
         subprocess, "Popen", ConfigurablePopen(stdout=b"boom\n", returncode=1)

@@ -57,6 +57,9 @@ SCRIPTS_DIR = os.path.abspath(os.path.join(_base_dir, "scripts"))
 COOLDOWNS_FILE = os.path.abspath(
     os.path.join(_base_dir, "data", "selfserve_cooldowns.json")
 )
+CRON_ALERTS_FILE = os.path.abspath(
+    os.path.join(_base_dir, "data", "cron_alerts.json")
+)
 
 # How many recent runs are kept for each automation.
 MAX_RUNS_PER_AUTOMATION = 20
@@ -491,3 +494,32 @@ def clear_selfserve_cooldowns(service: str) -> None:
         data = _read_json(COOLDOWNS_FILE, {})
         if data.pop(service, None) is not None:
             _write_json(COOLDOWNS_FILE, data)
+
+
+# --- Timed-run failure alerts ---
+
+
+def claim_cron_alert(name: str, now: float, interval: float) -> bool:
+    """True when timed automation ``name`` may send a failure alert now.
+
+    Each cron run is its own process, so the last alert time per
+    automation is kept on disk. A corrupt file counts as no previous
+    alerts: it only rate-limits a chat nudge, so it is rewritten rather
+    than kept. A stamp in the future (clock moved back) does not block.
+    """
+    try:
+        data = _read_json(CRON_ALERTS_FILE, {})
+    except StoreCorruptError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    last = data.get(name)
+    if (
+        isinstance(last, (int, float))
+        and not isinstance(last, bool)
+        and 0 <= now - last < interval
+    ):
+        return False
+    data[name] = now
+    _write_json(CRON_ALERTS_FILE, data)
+    return True

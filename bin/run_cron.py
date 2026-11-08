@@ -33,11 +33,13 @@ Cron calls this instead of the script itself:
     <venv python> <app dir>/bin/run_cron.py <automation name>
 
 so a timed run's output reaches the JAWA log under the automation's
-name, and a non-zero exit is logged as an error, the same as a webhook
-run. Without it, cron sends the output to the jawa user's local mail,
-which nobody reads.
+name, and a non-zero exit is logged as an error and sends the chat
+failure alert (if one is set on /setup), the same as a webhook run.
+Without it, cron sends the output to the jawa user's local mail, which
+nobody reads.
 
-The exit code is the script's own, so cron still sees a failure.
+The exit code is the script's own, so cron still sees a failure. The
+alert never changes it.
 """
 
 import os
@@ -50,14 +52,30 @@ if _APP_DIR not in sys.path:
     sys.path.insert(0, _APP_DIR)
 
 from bin import data_store  # noqa: E402
+from bin import failure_alert  # noqa: E402
 from bin import logger  # noqa: E402
 
 logthis = logger.setup_child_logger("jawa", "cron_runner")
 
 
 def run(name: str) -> int:
-    """Run the script of timed automation ``name``; return its exit code."""
-    entry = data_store.get_cron_by_name(name)
+    """Run timed automation ``name``; return its exit code.
+
+    Any non-zero result, including "no such automation" (1) and "could
+    not start" (126), sends the chat failure alert.
+    """
+    return_code = _run(name)
+    if return_code != 0:
+        failure_alert.notify_cron_failed(name, return_code)
+    return return_code
+
+
+def _run(name: str) -> int:
+    try:
+        entry = data_store.get_cron_by_name(name)
+    except Exception as err:
+        logthis.error(f"{name} - could not read the timed automations: {err}")
+        return 1
     script = (entry or {}).get("script")
     if not script:
         logthis.error(f"{name} - no timed automation with this name")

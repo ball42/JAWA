@@ -30,7 +30,6 @@ from flask import Blueprint, request
 import hmac
 import json
 import os
-import requests
 import signal
 import subprocess
 import threading
@@ -39,6 +38,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from bin import data_store
+from bin import failure_alert
 from bin import okta_verification
 from bin import logger
 
@@ -286,37 +286,21 @@ def custom_output_options(
 
 
 # Failure alerts: at most one per automation in this window. Kept in memory,
-# so it resets on restart, which is acceptable for a chat nudge.
-ALERT_INTERVAL_SECONDS = 15 * 60
+# so it resets on restart, which is acceptable for a chat nudge. The
+# sending core lives in bin/failure_alert.py, shared with timed runs.
+ALERT_INTERVAL_SECONDS = failure_alert.ALERT_INTERVAL_SECONDS
 _alert_lock = threading.Lock()
 _last_alert_at: Dict[str, float] = {}
 
 
 def _failure_alert_url() -> str:
     """The chat webhook set on /setup, or "" when none is configured."""
-    try:
-        with open(server_json_file, "r") as fin:
-            data = json.load(fin)
-    except Exception:
-        return ""
-    if not isinstance(data, dict):
-        return ""
-    return str(data.get("failure_alert_url") or "").strip()
+    return failure_alert.alert_url(server_json_file)
 
 
 def _post_failure_alert(url: str, text: str) -> None:
-    # Runs in a daemon thread. Logs the exception type only: the requests
-    # error text can carry the URL, and the URL is a credential.
-    try:
-        resp = requests.post(url, json={"text": text}, timeout=10)
-        if resp.status_code >= 400:
-            logthis.warning(
-                f"Failure alert was refused with HTTP {resp.status_code}."
-            )
-    except Exception as err:
-        logthis.warning(
-            f"Failure alert could not be sent ({type(err).__name__})."
-        )
+    # Runs in a daemon thread. Never raises.
+    failure_alert.post(url, text, log=logthis)
 
 
 def _start_alert_thread(target: Any, args: Tuple[Any, ...]) -> None:
@@ -338,10 +322,7 @@ def notify_run_failed(webhook_name: str, err: ScriptExecutionError) -> None:
                 return
             _last_alert_at[webhook_name] = now
         code = err.exit_code if err.exit_code is not None else "n/a"
-        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
-        text = (
-            f"JAWA: {webhook_name} failed (exit {code}) at {stamp}"
-        )
+        text = failure_alert.alert_text(webhook_name, code)
         _start_alert_thread(_post_failure_alert, (url, text))
     except Exception as alert_err:
         logthis.warning(

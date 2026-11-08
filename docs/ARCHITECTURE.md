@@ -41,7 +41,8 @@ JAWA is one Flask application served by Waitress on `127.0.0.1:8000`. nginx term
 | `views/_type_handlers/` | One handler class per automation type (`jamf`, `okta`, `custom`, `cron`, `selfserve`), all built on `base.py`. They own create, edit, delete and test for their type. |
 | `bin/data_store.py` | The only module that reads and writes the JSON data files. Writes are atomic (temp file then rename) and guarded by a lock. |
 | `bin/auth.py`, `bin/tokens.py` | Console sign-in against Jamf Pro, session handling, Jamf token renewal. |
-| `bin/run_cron.py` | Wrapper that cron calls for each timed automation so the output reaches the JAWA log and failures are recorded. |
+| `bin/failure_alert.py` | The chat failure alert shared by webhook and timed runs: reads the URL from `server.json`, builds the text, POSTs it, and keeps the timed-run rate limit in `data/cron_alerts.json` (a tolerant read; writes go through `data_store.atomic_write_json`). Never raises. |
+| `bin/run_cron.py` | Wrapper that cron calls for each timed automation so the output reaches the JAWA log, failures are recorded, and a failure sends the chat alert. |
 | `bin/brander_*.py`, `bin/vendor_wallrender.py`, `data/workflows/lib/wallrender/` | The Brander feature: validated, versioned template packages rendered with a vendored copy of the `wallrender` library. |
 | `bin/installer.sh` | Ubuntu and RHEL installer and upgrader: packages, `jawa` service account, venv, nginx, fail2ban, firewall, systemd unit. |
 | `data/` | Runtime state (see below) plus `webhook_schemas.json` and `time.json`, which ship with the code. |
@@ -75,7 +76,7 @@ A GET renders a confirmation page from the query string and runs nothing. Only t
 
 ## Request flow: timed automation
 
-Saving a timed automation writes a crontab line for the `jawa` user that calls `bin/run_cron.py <name>`. At the scheduled time cron runs that wrapper, which looks the entry up in `cron.json`, runs the script, logs the output under the automation's name, and exits with the script's own exit code. At startup `migrate_cron_commands()` rewrites older crontab lines to use the wrapper.
+Saving a timed automation writes a crontab line for the `jawa` user that calls `bin/run_cron.py <name>`. At the scheduled time cron runs that wrapper, which looks the entry up in `cron.json`, runs the script, logs the output under the automation's name, and exits with the script's own exit code. A non-zero exit, including "no such automation" and "could not start", sends the chat failure alert through `bin/failure_alert.py`, the module the webhook receiver also uses. Webhook runs send it from a background thread and rate-limit in memory; a cron run sends it synchronously (10-second timeout) and rate-limits through `data/cron_alerts.json`. At startup `migrate_cron_commands()` rewrites older crontab lines to use the wrapper.
 
 ## Data and state
 
@@ -89,6 +90,7 @@ All paths are relative to the install directory (`/usr/local/jawa` on a standard
 | `data/credentials.json` | Credentials that scripts can use. Kept at mode 0600. |
 | `data/runs.json` | Recent run history per automation. |
 | `data/selfserve_cooldowns.json` | Self-serve cooldown timestamps. |
+| `data/cron_alerts.json` | Time of the last chat failure alert per timed automation (the 15-minute rate limit). Safe to delete. |
 | `data/.secret_key` | Session signing key, created on first start (mode 0600) unless `JAWA_SECRET_KEY` is set. |
 | `data/jawa.log`, `data/jawa-auth.log` | Application log (rotated at 100 MB, ten backups) and the failed-login log that fail2ban reads. |
 | `data/brander_templates/` | Versioned Brander template packages, per Jamf Pro tenant. |
