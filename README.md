@@ -279,6 +279,10 @@ the web clip URL so you can build the profile by hand.
 - **Brander (Self-Serve).** Lets the person holding an iPad or iPhone apply a branded wallpaper
   showing the device's name, serial, location, and a QR code of its Jamf Pro id; it needs Pillow
   and qrcode, which the installer installs from `requirements.txt`.
+- **Brander (Asset Tag Watch).** Not self-serve: a timed template (every 15 minutes by default)
+  that runs the Brander above for any device whose asset tag or Brander extension attribute
+  changed, so a re-tagged device's wallpaper keeps up. See
+  `data/workflows/assets/brander/README.md`.
 
 ### Complete example
 

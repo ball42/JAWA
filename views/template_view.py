@@ -53,6 +53,11 @@ from bin.data_store import get_jawa_address, get_webhook_schemas
 from bin.tokens import fresh_token
 from bin.view_modifiers import response
 from views._type_handlers.base import AutomationError
+from views._type_handlers.cron_handler import (
+    _apply_frequency,
+    _get_crontab,
+    cron_command,
+)
 from views._type_handlers.jamf_handler import (
     USER_AGENT_STRING,
     VERIFY_SSL,
@@ -804,6 +809,85 @@ def _enable_selfserve(workflow: Dict[str, Any], credentials: list):
     )
 
 
+def _enable_cron(workflow: Dict[str, Any], credentials: list):
+    """Enable a timed template: fill its config, then create a timed
+    automation the same way the cron handler does (a crontab line that
+    calls bin/run_cron.py, and an entry in cron.json)."""
+    name = request.form.get("webhook_name", workflow["hook_name"]).strip()
+    schedule = (
+        request.form.get("schedule") or workflow.get("default_schedule", "")
+    ).strip()
+    try:
+        # The name is the crontab comment and run_cron.py's argument, so
+        # hold it to the same URL-safe rule as the other template names.
+        validate_webhook_name(name)
+        if data_store.cron_name_exists(name) or data_store.get_webhook_by_name(
+            name
+        ):
+            raise AutomationError(
+                "Error", f'The name "{name}" is already in use.'
+            )
+        if not schedule:
+            raise AutomationError("Error", "Enter a schedule.")
+        src_path = os.path.join(
+            TEMPLATE_SCRIPTS_DIR, workflow["script_file"]
+        )
+        if not os.path.isfile(src_path):
+            raise AutomationError(
+                "Script not found",
+                f"Script {workflow['script_file']} not found.",
+            )
+        with open(src_path, "r", encoding="utf-8") as f:
+            script_content = f.read()
+        script_content = substitute_params(
+            script_content,
+            workflow,
+            request.form,
+            credentials,
+            request.form.get("credential_set", ""),
+        )
+        # Validate the schedule before writing anything: a bad expression
+        # raises here and leaves no script and no crontab line behind.
+        cron = _get_crontab()
+        job = cron.new(command=cron_command(name), comment=name)
+        frequency = _apply_frequency(job, "custom", {"customfreq": schedule})
+    except AutomationError as err:
+        return redirect(
+            url_for("error", error=err.title, error_message=err.message)
+        )
+
+    dest_path = _write_script(name, script_content)
+    try:
+        cron.write()
+    except Exception as err:
+        os.remove(dest_path)
+        logthis.error(f"Could not write the crontab for {name}: {err}")
+        return redirect(
+            url_for(
+                "error",
+                error="Crontab Error",
+                error_message="Could not write the crontab; nothing was enabled.",
+            )
+        )
+    data_store.add_cron(
+        {
+            "name": name,
+            "description": workflow.get("description", ""),
+            "frequency": frequency,
+            "script": dest_path,
+        }
+    )
+    logthis.info(
+        f"[{session.get('url')}] {session.get('username')} enabled timed "
+        f"template: {name} ({frequency})"
+    )
+    return _flash_success(
+        success_msg=f"Enabled timed template: {name} ({frequency})",
+        new_link=f"/automations/cron/{name}",
+        new_here=name,
+    )
+
+
 @blueprint.route("/templates/<slug>/enable", methods=["GET", "POST"])
 def enable_template(slug: str) -> Union[Response, str]:
     """Enable a template: configure and install as a webhook."""
@@ -828,6 +912,8 @@ def enable_template(slug: str) -> Union[Response, str]:
         and workflow.get("trigger_type") == "selfserve"
     ):
         return _enable_selfserve(workflow, credentials)
+    if request.method == "POST" and workflow.get("trigger_type") == "cron":
+        return _enable_cron(workflow, credentials)
 
     if request.method == "GET":
         return render_template(

@@ -63,3 +63,39 @@ device receives.
 To update the renderer, run `bin/vendor_wallrender.py` against an EWOK
 checkout. Never edit `data/workflows/lib/wallrender` by hand: Brander refuses
 to run an edited copy (exit 31).
+
+## Asset Tag Watch
+
+Templates print `{{asset_tag}}`, so a device that is re-tagged keeps showing
+its old tag until it is branded again. The **Brander (Asset Tag Watch)**
+template does that for you. It is a timed automation (every 15 minutes by
+default; change the schedule on its edit page) that reads every mobile device
+from Jamf Pro and runs your installed **Brander (Self-Serve)** script for each
+device whose asset tag or "Brander" extension attribute changed.
+
+- Enable Brander (Self-Serve) first. Asset Tag Watch runs that script, so the
+  wallpaper settings, templates and checks are the ones it already has. Its
+  "Brander script path" setting defaults to
+  `/usr/local/jawa/scripts/brand-device.py`, where enabling Brander
+  (Self-Serve) under its default name puts the script. If you named it
+  something else, the path is on that automation's detail page.
+- The asset tag is the first non-empty of asset tag, barcode 1 and barcode 2.
+  `null`, `none`, `n/a` and blank all count as empty.
+- The first run only records what it sees. Nothing is branded until a device
+  changes after that.
+- A change is stored once Brander has dealt with it: it set the wallpaper, or
+  the device cannot take one (Brander EA Off, not supervised, not iOS or
+  iPadOS). Any other failure is retried on the next run, and the run exits 2,
+  which the JAWA log records as a failed run. (Timed automations do not send
+  the chat failure alert yet; only webhook runs do.) Exit 1 means the device list could not be read;
+  nothing is stored.
+- "Dry run" set to `yes` prints which devices would be branded and why, and
+  stores nothing for them.
+- State is a SQLite file (default `/usr/local/jawa/data/asset_tag_watch.sqlite`).
+  Delete it to start over; the next run seeds again.
+- Its API client needs only **Read Mobile Devices**. The Brander's own client
+  sends the wallpaper.
+- Each run reads every device record, one API call per device. On a large
+  fleet, choose a schedule that leaves the run time to finish. A run that starts
+  while the previous one is still going skips itself, so no device is branded
+  twice.
