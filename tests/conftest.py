@@ -201,6 +201,11 @@ def jawa_env(tmp_path, monkeypatch):
         str(env.data_dir / "selfserve_cooldowns.json"),
     )
     monkeypatch.setattr(data_store, "CRON_FILE", cron)
+    monkeypatch.setattr(
+        data_store,
+        "CRON_ALERTS_FILE",
+        str(env.data_dir / "cron_alerts.json"),
+    )
     monkeypatch.setattr(data_store, "SERVER_FILE", server)
     monkeypatch.setattr(
         data_store, "TIME_FILE", str(env.data_dir / "time.json")

@@ -86,8 +86,8 @@ device whose asset tag or "Brander" extension attribute changed.
 - A change is stored once Brander has dealt with it: it set the wallpaper, or
   the device cannot take one (Brander EA Off, not supervised, not iOS or
   iPadOS). Any other failure is retried on the next run, and the run exits 2,
-  which the JAWA log records as a failed run. (Timed automations do not send
-  the chat failure alert yet; only webhook runs do.) Exit 1 means the device list could not be read;
+  which the JAWA log records as a failed run and which sends the chat failure
+  alert set on Setup. Exit 1 means the device list could not be read;
   nothing is stored.
 - "Dry run" set to `yes` prints which devices would be branded and why, and
   stores nothing for them.
