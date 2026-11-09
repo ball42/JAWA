@@ -68,8 +68,23 @@ def test_console_pages_do_not_load_roster(logged_in_client, jawa_env, path):
     assert "css/vendor/" not in body
 
 
-def test_selfserve_css_has_no_private_palette():
-    with open(os.path.join(REPO_ROOT, "static", "css", "selfserve.css"), encoding="utf-8") as handle:
-        css = handle.read()
-    assert not re.findall(r"#[0-9a-fA-F]{3,8}\b", css)
-    assert "--ss-" not in css
+def _css(name):
+    with open(os.path.join(REPO_ROOT, "static", "css", name), encoding="utf-8") as handle:
+        return handle.read()
+
+
+def test_selfserve_pages_keep_jawas_own_palette():
+    # Roster supplies the parts; the colours stay JAWA's self-serve palette.
+    css = _css("selfserve.css")
+    assert "--ss-accent: #1d4ed8;" in css
+    assert "--roster-primary-600: var(--ss-accent);" in css
+    assert "--rb-surface: var(--ss-bg);" in css
+
+
+def test_brander_pages_use_the_console_palette():
+    # The Brander pages sit inside the console, so roster's tokens point at
+    # main.css's variables and follow its dark mode.
+    css = _css("brander.css")
+    assert "--roster-primary-600: var(--color-primary);" in css
+    assert "--roster-card-bg: var(--color-surface);" in css
+    assert "@media (prefers-color-scheme: dark)" in css
