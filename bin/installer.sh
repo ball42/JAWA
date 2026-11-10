@@ -857,7 +857,7 @@ F2BEOF
   cat <<EOF >>/etc/systemd/system/jawa.service
 [Unit]
 Description=Jamf Automation & Webhooks Assistant
-Documentation=https://github.com/ball42/JAWA
+Documentation=https://github.com/jamf/JAWA
 After=network.target
 
 [Service]
@@ -1458,10 +1458,10 @@ if [ -z "$branch" ]; then
   branch="main"
 fi
 
-# Clone from the ball42 fork, which carries the self-serve automation type
-# (develop branch). Pass "repo <git url>" to install from another repository.
+# Clone from jamf/JAWA by default. Pass "repo <git url>" to install from
+# another repository, such as a fork.
 if [ -z "$repoUrl" ]; then
-  repoUrl="https://github.com/ball42/JAWA.git"
+  repoUrl="https://github.com/jamf/JAWA.git"
 fi
 
 
