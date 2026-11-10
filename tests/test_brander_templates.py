@@ -61,7 +61,9 @@ def load_brander(script_path=SCRIPT, template_path="legacy", max_kb=1500):
 @pytest.fixture(autouse=True)
 def _fresh_wallrender():
     """Each test imports the renderer the way the script does."""
-    saved = {k: v for k, v in sys.modules.items() if k.startswith("wallrender")}
+    saved = {
+        k: v for k, v in sys.modules.items() if k.startswith("wallrender")
+    }
     for name in saved:
         del sys.modules[name]
     saved_path = list(sys.path)
@@ -122,7 +124,10 @@ class FakeJamf:
         self.commands = []
 
     def request(self, method, url, **kwargs):
-        if method == "GET" and url == f"{SERVER}/JSSResource/mobiledevices/id/42":
+        if (
+            method == "GET"
+            and url == f"{SERVER}/JSSResource/mobiledevices/id/42"
+        ):
             if self.lookup_status != 200:
                 return FakeResponse(self.lookup_status, text=self.error_body)
             return FakeResponse(200, {"mobile_device": self.device})
@@ -323,14 +328,18 @@ def test_exact_model_beats_family(jamf, tmp_path):
 
 
 def test_set_entries_resolve_next_to_the_set_file(jamf, tmp_path):
-    path = write_set(tmp_path, {"default": "only.json"}, {"only.json": (120, 240)})
+    path = write_set(
+        tmp_path, {"default": "only.json"}, {"only.json": (120, 240)}
+    )
     assert run(load_brander(template_path=path)) == 0
     with Image.open(io.BytesIO(jamf.sent_image())) as img:
         assert img.size == (120, 240)
 
 
 def test_set_logs_the_template_it_chose(jamf, tmp_path, capsys):
-    path = write_set(tmp_path, {"iphone": "phone.json"}, {"phone.json": (100, 200)})
+    path = write_set(
+        tmp_path, {"iphone": "phone.json"}, {"phone.json": (100, 200)}
+    )
     jamf.device["general"]["model_identifier"] = "iPhone14,2"
     run(load_brander(template_path=path))
     assert "wallpaper set (phone.json, sha256 " in capsys.readouterr().out
@@ -353,15 +362,21 @@ def test_unusable_set_exits_30(jamf, tmp_path, templates):
     assert jamf.commands == []
 
 
-def test_empty_asset_tag_hides_its_line_in_the_shipped_template(jamf, tmp_path):
+def test_empty_asset_tag_hides_its_line_in_the_shipped_template(
+    jamf, tmp_path
+):
     """The example labels the asset tag ("Asset HR-0042"); with no tag on
     the record the whole line is skipped, not printed as a bare label."""
     with open(os.path.join(ASSETS, "example-ipad-template.json")) as handle:
         template = json.load(handle)
-    without = dict(template, layers=[
-        layer for layer in template["layers"]
-        if layer.get("text") != "Asset {{asset_tag}}"
-    ])
+    without = dict(
+        template,
+        layers=[
+            layer
+            for layer in template["layers"]
+            if layer.get("text") != "Asset {{asset_tag}}"
+        ],
+    )
     jamf.device["general"]["asset_tag"] = ""
     run(load_brander(template_path="example-ipad-template.json"))
     shipped = jamf.sent_image()
@@ -575,7 +590,9 @@ def test_slow_encode_counts_against_the_timeout(jamf, tmp_path, monkeypatch):
         template_path=write_template(tmp_path, basic_template())
     )
     module.RENDER_TIMEOUT = 0.2
-    monkeypatch.setattr(module, "encode_within_budget", lambda *a: time.sleep(5))
+    monkeypatch.setattr(
+        module, "encode_within_budget", lambda *a: time.sleep(5)
+    )
     assert run(module) == 33
     assert jamf.commands == []
 
@@ -655,14 +672,17 @@ ROLE_TEMPLATE = {
 
 def with_eas(record, **eas):
     record["extension_attributes"] = [
-        {"id": i, "name": name, "value": value} for i, (name, value) in enumerate(eas.items())
+        {"id": i, "name": name, "value": value}
+        for i, (name, value) in enumerate(eas.items())
     ]
     return record
 
 
 def test_role_comes_only_from_the_named_attribute(jamf):
     module = load_brander()
-    record = with_eas(device_record(), **{"Jamf Setup Role": " Nursing ", "Secret EA": "x"})
+    record = with_eas(
+        device_record(), **{"Jamf Setup Role": " Nursing ", "Secret EA": "x"}
+    )
     values = module.build_values(record, ROLE_TEMPLATE)
     assert values["role"] == "Nursing"
     assert "Secret EA" not in str(values) and "x" not in values.values()
@@ -685,7 +705,9 @@ def test_no_roles_block_means_no_role_value(jamf):
 )
 def test_brander_renders_the_role_variant(jamf, tmp_path, eas, colour):
     with_eas(jamf.device, **eas)
-    module = load_brander(template_path=write_template(tmp_path, ROLE_TEMPLATE))
+    module = load_brander(
+        template_path=write_template(tmp_path, ROLE_TEMPLATE)
+    )
     assert run(module) == 0
     with Image.open(io.BytesIO(jamf.sent_image())) as img:
         assert img.convert("RGB").getpixel((5, 5)) == colour
@@ -747,8 +769,10 @@ def test_each_send_logs_the_template_and_its_hash(jamf, tmp_path, capsys):
 
 def test_legacy_send_says_legacy(jamf, capsys):
     assert run(load_brander()) == 0
-    assert "Device 42: wallpaper set (legacy layout, null.png)" in capsys.readouterr().out
-
+    assert (
+        "Device 42: wallpaper set (legacy layout, null.png)"
+        in capsys.readouterr().out
+    )
 
 
 # --- M3-2: personal fields need the template and the admin (ADR-0013) --------
@@ -759,8 +783,12 @@ PERSON_TEMPLATE = {
     "background": {"color": "#000000"},
     "person_fields": True,
     "layers": [
-        {"type": "text", "text": "{{user.real_name}}", "size": 0.05,
-         "box": {"x": 0.05, "y": 0.4, "w": 0.9, "h": 0.1}},
+        {
+            "type": "text",
+            "text": "{{user.real_name}}",
+            "size": 0.05,
+            "box": {"x": 0.05, "y": 0.4, "w": 0.9, "h": 0.1},
+        },
     ],
 }
 
@@ -774,8 +802,15 @@ def load_with_people(allow, **kw):
 @pytest.mark.parametrize(
     "allow, opted_in, expected",
     [
-        ("yes", True, {"real_name": "Jackie Peyton", "username": "nurse.jackie",
-                       "email": "jackie@example.org"}),
+        (
+            "yes",
+            True,
+            {
+                "real_name": "Jackie Peyton",
+                "username": "nurse.jackie",
+                "email": "jackie@example.org",
+            },
+        ),
         ("no", True, None),
         ("yes", False, None),
         ("no", False, None),
@@ -788,11 +823,17 @@ def test_user_fields_need_both_locks(jamf, allow, opted_in, expected):
     assert values.get("user") == expected
 
 
-def test_withheld_person_fields_render_empty_and_say_why(jamf, tmp_path, capsys):
-    module = load_with_people("no", template_path=write_template(tmp_path, PERSON_TEMPLATE))
+def test_withheld_person_fields_render_empty_and_say_why(
+    jamf, tmp_path, capsys
+):
+    module = load_with_people(
+        "no", template_path=write_template(tmp_path, PERSON_TEMPLATE)
+    )
     assert run(module) == 0
     assert "personal fields withheld" in capsys.readouterr().out
-    allowed = load_with_people("yes", template_path=write_template(tmp_path, PERSON_TEMPLATE))
+    allowed = load_with_people(
+        "yes", template_path=write_template(tmp_path, PERSON_TEMPLATE)
+    )
     blank = jamf.sent_image()
     jamf.commands.clear()
     assert run(allowed) == 0

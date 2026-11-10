@@ -124,16 +124,14 @@ def test_detail_shows_the_web_clip_url(logged_in_client, jawa_env):
         content_type="multipart/form-data",
     )
     entry = data_store.get_webhook_by_name("reset-ipad")
-    body = logged_in_client.get(
-        "/automations/selfserve/reset-ipad"
-    ).get_data(as_text=True)
+    body = logged_in_client.get("/automations/selfserve/reset-ipad").get_data(
+        as_text=True
+    )
     assert "/selfserve/reset-ipad?token=" + entry["token"] in body
     assert "Device family" in body
 
 
-def test_edit_updates_strings_and_keeps_the_token(
-    logged_in_client, jawa_env
-):
+def test_edit_updates_strings_and_keeps_the_token(logged_in_client, jawa_env):
     logged_in_client.post(
         "/automations/selfserve/new",
         data=_create_form(),
@@ -154,9 +152,7 @@ def test_edit_updates_strings_and_keeps_the_token(
     assert after["script"] == before["script"]
 
 
-def test_delete_retires_script_and_removes_record(
-    logged_in_client, jawa_env
-):
+def test_delete_retires_script_and_removes_record(logged_in_client, jawa_env):
     logged_in_client.post(
         "/automations/selfserve/new",
         data=_create_form(),
@@ -168,9 +164,9 @@ def test_delete_retires_script_and_removes_record(
     )
     assert resp.status_code in (200, 302)
     assert data_store.get_webhook_by_name("reset-ipad") is None
-    assert (jawa_env.scripts_dir / (
-        entry["script"].rsplit("/", 1)[1] + ".old"
-    )).exists()
+    assert (
+        jawa_env.scripts_dir / (entry["script"].rsplit("/", 1)[1] + ".old")
+    ).exists()
 
 
 @pytest.mark.parametrize(
@@ -236,7 +232,6 @@ def test_plist_is_a_managed_web_clip_with_the_service_url():
     )
 
 
-
 def test_plist_web_clip_icon_is_the_jawa_logo():
     """The home-screen icon defaults to the JAWA logo, a precomposed
     180x180 PNG embedded as data."""
@@ -245,13 +240,16 @@ def test_plist_web_clip_icon_is_the_jawa_logo():
     from PIL import Image
 
     entry = {"name": "reset-ipad", "page_title": "Reset"}
-    plist = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    plist = plistlib.loads(
+        ssh.build_webclip_plist(entry, "https://x/").encode()
+    )
     icon = plist["PayloadContent"][0]["Icon"]
     assert isinstance(icon, bytes)
     with Image.open(io.BytesIO(icon)) as img:
         assert img.format == "PNG"
         assert img.size == (180, 180)
     assert plist["PayloadContent"][0]["Precomposed"] is True
+
 
 def test_plist_uuids_are_random_when_the_record_stores_none():
     """Deterministic uuid5 UUIDs collided with a retired profile's when
@@ -275,7 +273,9 @@ def test_plist_uuids_come_from_the_record_when_stored():
         "profile_uuid": "11111111-2222-4333-8444-555555555555",
         "clip_uuid": "66666666-7777-4888-8999-AAAAAAAAAAAA",
     }
-    plist = plistlib.loads(ssh.build_webclip_plist(entry, "https://x/").encode())
+    plist = plistlib.loads(
+        ssh.build_webclip_plist(entry, "https://x/").encode()
+    )
     assert plist["PayloadUUID"] == entry["profile_uuid"]
     assert plist["PayloadContent"][0]["PayloadUUID"] == entry["clip_uuid"]
 
@@ -317,8 +317,7 @@ def test_profile_xml_is_well_formed_and_unscoped():
     root = ET.fromstring(ssh.build_profile_xml(entry, "https://x/?a=1&b=2"))
     assert root.tag == "configuration_profile"
     assert (
-        root.findtext("general/name")
-        == "JAWA Self-Serve: Reset (reset-ipad)"
+        root.findtext("general/name") == "JAWA Self-Serve: Reset (reset-ipad)"
     )
     assert root.findtext("scope/all_mobile_devices") == "false"
     assert root.findtext("general/redeploy_on_update") == "All"
@@ -335,9 +334,7 @@ def test_profile_xml_names_differ_for_same_title_different_service():
     entry_b = {"name": "reset-ipad-b", "page_title": "Reset"}
     root_a = ET.fromstring(ssh.build_profile_xml(entry_a, "https://x/"))
     root_b = ET.fromstring(ssh.build_profile_xml(entry_b, "https://x/"))
-    assert root_a.findtext("general/name") != root_b.findtext(
-        "general/name"
-    )
+    assert root_a.findtext("general/name") != root_b.findtext("general/name")
 
 
 def test_create_with_checkbox_creates_profile_and_stores_id(
@@ -428,17 +425,13 @@ def test_edit_updates_the_profile_when_one_exists(
     )
 
 
-def test_delete_retires_the_profile(
-    logged_in_client, jawa_env, profile_jamf
-):
+def test_delete_retires_the_profile(logged_in_client, jawa_env, profile_jamf):
     logged_in_client.post(
         "/automations/selfserve/new",
         data=_create_form(create_profile="on"),
         content_type="multipart/form-data",
     )
-    logged_in_client.post(
-        "/automations/selfserve/reset-ipad/delete", data={}
-    )
+    logged_in_client.post("/automations/selfserve/reset-ipad/delete", data={})
     url, kwargs = profile_jamf.puts[-1]
     assert "/mobiledeviceconfigurationprofiles/id/55" in url
     assert ".old." in kwargs["data"]
@@ -452,9 +445,7 @@ def test_computer_family_never_gets_a_mobile_profile(
     even with the checkbox on."""
     logged_in_client.post(
         "/automations/selfserve/new",
-        data=_create_form(
-            device_family="computer", create_profile="on"
-        ),
+        data=_create_form(device_family="computer", create_profile="on"),
         content_type="multipart/form-data",
     )
     entry = data_store.get_webhook_by_name("reset-ipad")
@@ -591,9 +582,15 @@ def test_edit_can_rotate_the_token(
     new = data_store.get_webhook_by_name("reset-ipad")["token"]
     assert new != old
     query = {"token": old, "id": "7", "udid": "UDID-1"}
-    assert client.get("/selfserve/reset-ipad", query_string=query).status_code == 401
+    assert (
+        client.get("/selfserve/reset-ipad", query_string=query).status_code
+        == 401
+    )
     query["token"] = new
-    assert client.get("/selfserve/reset-ipad", query_string=query).status_code == 200
+    assert (
+        client.get("/selfserve/reset-ipad", query_string=query).status_code
+        == 200
+    )
     _, kwargs = profile_jamf.puts[-1]
     assert new in kwargs["data"]
     assert old not in kwargs["data"]
@@ -625,9 +622,10 @@ def test_edit_creates_a_missing_profile(
         data=_create_form(create_profile="on"),
         content_type="multipart/form-data",
     )
-    assert data_store.get_webhook_by_name("reset-ipad")[
-        "profile_status"
-    ] == "failed"
+    assert (
+        data_store.get_webhook_by_name("reset-ipad")["profile_status"]
+        == "failed"
+    )
     page = logged_in_client.get(
         "/automations/selfserve/reset-ipad/edit"
     ).get_data(as_text=True)

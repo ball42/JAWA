@@ -184,8 +184,9 @@ def test_script_that_cannot_start_alerts_with_126(jawa_env, alerting):
     assert run_cron.run("NotExecutable") == 126
 
     assert len(alerting.calls) == 1
-    assert "JAWA: NotExecutable failed (exit 126) at " in (
-        alerting.calls[0]["json"]["text"]
+    assert (
+        "JAWA: NotExecutable failed (exit 126) at "
+        in (alerting.calls[0]["json"]["text"])
     )
 
 
@@ -193,8 +194,9 @@ def test_unknown_automation_alerts(jawa_env, alerting):
     assert run_cron.run("Missing") == 1
 
     assert len(alerting.calls) == 1
-    assert "JAWA: Missing failed (exit 1) at " in (
-        alerting.calls[0]["json"]["text"]
+    assert (
+        "JAWA: Missing failed (exit 1) at "
+        in (alerting.calls[0]["json"]["text"])
     )
 
 
@@ -202,6 +204,7 @@ def test_corrupt_cron_file_still_alerts(jawa_env, alerting):
     jawa_env.cron_file.write_text("{not json")
     assert run_cron.run("anything") == 1
     assert len(alerting.calls) == 1
-    assert "JAWA: anything failed (exit 1) at " in (
-        alerting.calls[0]["json"]["text"]
+    assert (
+        "JAWA: anything failed (exit 1) at "
+        in (alerting.calls[0]["json"]["text"])
     )

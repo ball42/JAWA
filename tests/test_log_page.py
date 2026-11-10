@@ -1,4 +1,5 @@
 """The log page: filters in the URL, follow mode, and the level buttons."""
+
 import pytest
 
 

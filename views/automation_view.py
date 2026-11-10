@@ -492,8 +492,11 @@ def preview_selfserve(name: str) -> str:
     if state not in dict(PREVIEW_STATES):
         state = "confirm"
     strings = receiver._page_strings(automation, receiver.SAMPLE_PARAMS)
-    context: Dict[str, Any] = {"strings": strings, "preview": True,
-                               "service_name": automation["name"]}
+    context: Dict[str, Any] = {
+        "strings": strings,
+        "preview": True,
+        "service_name": automation["name"],
+    }
     if state in ("confirm", "cooldown"):
         template = "selfserve/confirm.html"
         context["cooldown"] = (

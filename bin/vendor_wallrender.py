@@ -50,9 +50,11 @@ def main():
         sys.exit(__doc__)
     ewok, ref = sys.argv[1], sys.argv[2]
     commit = git(ewok, "rev-parse", f"{ref}^{{commit}}").decode().strip()
-    names = git(
-        ewok, "ls-tree", "-r", "--name-only", commit, SOURCE_PREFIX
-    ).decode().split()
+    names = (
+        git(ewok, "ls-tree", "-r", "--name-only", commit, SOURCE_PREFIX)
+        .decode()
+        .split()
+    )
     names = [n for n in names if "__pycache__" not in n]
     pyproject = git(ewok, "show", f"{commit}:wallrender/pyproject.toml")
     version = next(
@@ -63,7 +65,7 @@ def main():
 
     shutil.rmtree(PACKAGE_DIR, ignore_errors=True)
     files = {}
-    sources = [(n, n[len(SOURCE_PREFIX):]) for n in names]
+    sources = [(n, n[len(SOURCE_PREFIX) :]) for n in names]
     sources.append((LICENSE_SOURCE, "LICENSE"))
     for source, rel in sources:
         data = git(ewok, "show", f"{commit}:{source}")
@@ -85,8 +87,10 @@ def main():
     with open(LOCK_PATH, "w", encoding="utf-8") as handle:
         json.dump(lock, handle, indent=2)
         handle.write("\n")
-    print(f"Vendored wallrender {version} from {commit[:12]}: "
-          f"{len(files)} files.")
+    print(
+        f"Vendored wallrender {version} from {commit[:12]}: "
+        f"{len(files)} files."
+    )
 
 
 if __name__ == "__main__":

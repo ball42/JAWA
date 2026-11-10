@@ -7,6 +7,7 @@ from flask import render_template_string
 
 def test_the_hero_macro_renders_the_band():
     from app import app
+
     with app.test_request_context():
         html = render_template_string(
             '{% from "shared/_macros.html" import hero_section %}'
@@ -15,7 +16,9 @@ def test_the_hero_macro_renders_the_band():
     assert '<div class="hero-section">' in html and 'class="hero-cta"' in html
 
 
-@pytest.mark.parametrize("path", ["/dashboard", "/log/home.html", "/setup", "/resources/files"])
+@pytest.mark.parametrize(
+    "path", ["/dashboard", "/log/home.html", "/setup", "/resources/files"]
+)
 def test_pages_use_the_single_hero_style(logged_in_client, jawa_env, path):
     body = logged_in_client.get(path).get_data(as_text=True)
     assert 'class="hero-section"' in body

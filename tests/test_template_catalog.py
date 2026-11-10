@@ -418,7 +418,6 @@ def test_unfilled_param_fails_loud():
     assert "SQLite Database Path" in excinfo.value.message
 
 
-
 def test_blank_param_with_a_default_uses_the_default():
     """Optional settings (Brander's template_path and max_kb) declare a
     default, so an admin who leaves them blank gets the documented
@@ -451,15 +450,18 @@ def test_blank_param_with_a_default_uses_the_default():
     assert out == "T = 'legacy'\nK = 1500\n"
 
 
-
 def test_blank_param_without_a_default_is_still_missing():
     from views import template_view
     from views._type_handlers.base import AutomationError
 
     workflow = {
         "config_params": [
-            {"key": "path", "label": "Path", "token": '"__JAWA_P__"',
-             "type": "text"}
+            {
+                "key": "path",
+                "label": "Path",
+                "token": '"__JAWA_P__"',
+                "type": "text",
+            }
         ]
     }
     with pytest.raises(AutomationError):
@@ -483,12 +485,14 @@ def test_whitespace_value_is_kept_when_there_is_no_default():
     )
     assert out == "S = '  '\n"
 
+
 def test_enable_form_prefills_param_defaults(logged_in_client, jawa_env):
     response = logged_in_client.get("/templates/self-serve-brander/enable")
     html = response.get_data(as_text=True)
     assert 'id="param-template_path"' in html
     assert 'value="legacy"' in html
     assert 'value="1500"' in html
+
 
 def test_credential_set_fills_the_standard_three():
     from views import template_view
@@ -1122,8 +1126,12 @@ def test_deployed_script_is_executable(jawa_env):
     # bakes the credential set's client_secret into this source, so any
     # group or other bit hands that secret to every local account.
     leaked = mode & (
-        stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP
-        | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+        stat.S_IRGRP
+        | stat.S_IWGRP
+        | stat.S_IXGRP
+        | stat.S_IROTH
+        | stat.S_IWOTH
+        | stat.S_IXOTH
     )
     assert not leaked, (
         f"_write_script left {oct(mode)} on {dest}; this file can hold a "
@@ -1160,9 +1168,7 @@ def test_write_script_leaves_a_non_python_shebang_alone(jawa_env):
     """An operator's bash script is theirs; only python is retargeted."""
     from views import template_view
 
-    dest = template_view._write_script(
-        "bash-check", "#!/bin/bash\necho hi\n"
-    )
+    dest = template_view._write_script("bash-check", "#!/bin/bash\necho hi\n")
     first_line = open(dest, encoding="utf-8").readline().rstrip("\n")
     assert first_line == "#!/bin/bash"
 
@@ -1253,9 +1259,18 @@ def test_every_outbound_call_in_a_bundled_script_is_bounded(workflow):
         func = node.func
         if not isinstance(func, ast.Attribute):
             continue
-        if not (isinstance(func.value, ast.Name) and func.value.id == "requests"):
+        if not (
+            isinstance(func.value, ast.Name) and func.value.id == "requests"
+        ):
             continue
-        if func.attr not in ("get", "post", "put", "delete", "patch", "request"):
+        if func.attr not in (
+            "get",
+            "post",
+            "put",
+            "delete",
+            "patch",
+            "request",
+        ):
             continue
         if not any(kw.arg == "timeout" for kw in node.keywords):
             unbounded.append(f"line {node.lineno}: requests.{func.attr}")

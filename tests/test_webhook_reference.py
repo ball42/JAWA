@@ -172,7 +172,9 @@ def test_detail_offers_a_copy_button(logged_in_client, jawa_env):
     # The shared script, loaded by the layout, does the copying.
     assert "js/copy.js" in body
     with open(
-        os.path.join(os.path.dirname(__file__), "..", "static", "js", "copy.js"),
+        os.path.join(
+            os.path.dirname(__file__), "..", "static", "js", "copy.js"
+        ),
         encoding="utf-8",
     ) as handle:
         assert "clipboard.writeText" in handle.read()

@@ -96,8 +96,7 @@ def _run(name: str) -> int:
     return_code = proc.wait()
     if return_code != 0:
         logthis.error(
-            f"Script execution failed for {name} "
-            f"with exit code {return_code}"
+            f"Script execution failed for {name} with exit code {return_code}"
         )
     return return_code
 

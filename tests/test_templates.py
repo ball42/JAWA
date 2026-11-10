@@ -110,8 +110,7 @@ def test_blank_auth_field_does_not_lock_the_webhook_out(
         # answered 200 anyway; the stub script here genuinely fails on
         # this payload, and that is a separate concern from auth.
         assert resp.status_code != 401, (
-            "inbound event rejected 401; the webhook is permanently "
-            "locked out"
+            "inbound event rejected 401; the webhook is permanently locked out"
         )
 
 
@@ -235,9 +234,7 @@ def _upload(client, package, **fields):
     )
 
 
-def test_import_rejects_script_that_does_not_parse(
-    logged_in_client, jawa_env
-):
+def test_import_rejects_script_that_does_not_parse(logged_in_client, jawa_env):
     """A truncated or malformed upload used to be written, chmod 0755'd
     and registered as a live webhook, then fail inside Popen where the
     only signal is a logged non-zero exit code (bug B16).
@@ -297,9 +294,7 @@ def test_import_form_offers_jamf_registration_by_default(logged_in_client):
     is the default, not an extra step the admin has to know about.
     """
     body = logged_in_client.get("/templates/import").get_data(as_text=True)
-    match = re.search(
-        r'<input[^>]*name="create_in_jamf"[^>]*>', body, re.S
-    )
+    match = re.search(r'<input[^>]*name="create_in_jamf"[^>]*>', body, re.S)
     assert match, "no create_in_jamf control on the import form"
     assert "checked" in match.group(0), (
         "the Jamf Pro registration box is not checked by default"
@@ -458,9 +453,7 @@ def test_substitution_rejects_a_token_no_param_declares():
         )
 
 
-def test_enable_files_the_automation_under_jamfpro(
-    logged_in_client, jawa_env
-):
+def test_enable_files_the_automation_under_jamfpro(logged_in_client, jawa_env):
     """Templates wrote tag "custom" while carrying a Jamf event, so they
     were misfiled under Custom and edited against a form with no event
     field -- their trigger was invisible and uneditable (bug B14).
@@ -510,9 +503,7 @@ def test_enable_writes_nothing_when_jamf_rejects(
         },
     )
 
-    assert (
-        data_store.get_webhook_by_name("Device-Naming-by-Asset-Tag") is None
-    )
+    assert data_store.get_webhook_by_name("Device-Naming-by-Asset-Tag") is None
     written = os.listdir(str(jawa_env.scripts_dir))
     assert written == [], f"orphaned script(s) left behind: {written}"
 
@@ -626,9 +617,9 @@ def test_fixed_event_template_does_not_offer_a_picker(
     picker there would let the admin choose an event the script cannot
     parse, and the server ignores the field anyway.
     """
-    body = logged_in_client.get(
-        "/templates/device-naming/enable"
-    ).get_data(as_text=True)
+    body = logged_in_client.get("/templates/device-naming/enable").get_data(
+        as_text=True
+    )
     assert 'name="event"' not in body
     assert "MobileDeviceEnrolled" in body
 
@@ -780,9 +771,9 @@ def test_enable_form_marks_which_keys_each_set_supplies(
             },
         ],
     )
-    body = logged_in_client.get(
-        "/templates/device-naming/enable"
-    ).get_data(as_text=True)
+    body = logged_in_client.get("/templates/device-naming/enable").get_data(
+        as_text=True
+    )
 
     assert 'data-supplies="server_url client_id client_secret"' in body
     assert 'data-supplies="server_url"' in body
@@ -812,9 +803,9 @@ def test_enable_form_never_renders_credential_values(
             }
         ],
     )
-    body = logged_in_client.get(
-        "/templates/device-naming/enable"
-    ).get_data(as_text=True)
+    body = logged_in_client.get("/templates/device-naming/enable").get_data(
+        as_text=True
+    )
 
     assert secret not in body
     assert client_id not in body

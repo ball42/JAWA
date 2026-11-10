@@ -289,7 +289,7 @@ def build_profile_xml(entry: Dict[str, Any], url: str) -> str:
     name = xml_escape(_display_name(entry))
     description = xml_escape(
         f"Created by JAWA for the self-serve automation "
-        f"\"{entry['name']}\". Scope it to the devices that should show "
+        f'"{entry["name"]}". Scope it to the devices that should show '
         "the web clip."
     )
     plist = xml_escape(build_webclip_plist(entry, url))
@@ -335,8 +335,7 @@ def create_webclip_profile(
         raise
     except Exception as err:
         logthis.error(
-            f"Could not create the web clip profile for "
-            f"{entry['name']}: {err}"
+            f"Could not create the web clip profile for {entry['name']}: {err}"
         )
         return None
     if resp.status_code >= 400:
@@ -360,9 +359,7 @@ def update_webclip_profile(
 ) -> bool:
     if not entry.get("jamf_id"):
         return False
-    full_url = (
-        f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
-    )
+    full_url = f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
     try:
         fresh_token(session_data)
         resp = requests.put(
@@ -401,9 +398,7 @@ def retire_webclip_profile(
         "<departments/></scope>"
         "</configuration_profile>"
     )
-    full_url = (
-        f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
-    )
+    full_url = f"{session_data['url']}{PROFILE_ENDPOINT}/id/{entry['jamf_id']}"
     try:
         fresh_token(session_data)
         resp = requests.put(
@@ -439,9 +434,7 @@ def register_profile(
         entry["jamf_id"] = None
         entry["profile_status"] = "skipped"
         return
-    url = service_url(
-        get_jawa_address() or "", entry["name"], entry["token"]
-    )
+    url = service_url(get_jawa_address() or "", entry["name"], entry["token"])
     jamf_id = create_webclip_profile(entry, url, session_data)
     entry["jamf_id"] = jamf_id
     entry["profile_status"] = "created" if jamf_id else "failed"
@@ -530,7 +523,9 @@ def _cooldown_label(automation: Dict[str, Any]) -> str:
     return f"{minutes} minute{'s' if minutes != 1 else ''} per device"
 
 
-BRANDER_SOURCE = os.path.join(_REPO_ROOT, "data", "workflows", "scripts", "self_serve_brander.py")
+BRANDER_SOURCE = os.path.join(
+    _REPO_ROOT, "data", "workflows", "scripts", "self_serve_brander.py"
+)
 
 
 def _apply_brander_settings(script: str, form: Mapping[str, Any]) -> str:
@@ -555,7 +550,9 @@ def _apply_brander_settings(script: str, form: Mapping[str, Any]) -> str:
         if updates:
             brander_settings.write_settings(script, updates)
     except brander_settings.SettingsError as err:
-        raise AutomationError("Brander settings", " ".join(err.problems)) from err
+        raise AutomationError(
+            "Brander settings", " ".join(err.problems)
+        ) from err
     return note
 
 
@@ -766,7 +763,5 @@ class SelfServeHandler(AutomationHandler):
         for key in PAGE_FIELDS:
             fields.append((PAGE_FIELD_LABELS[key], automation.get(key, "")))
         if automation.get("jamf_id"):
-            fields.append(
-                ("Jamf Pro profile ID", str(automation["jamf_id"]))
-            )
+            fields.append(("Jamf Pro profile ID", str(automation["jamf_id"])))
         return fields

@@ -107,9 +107,7 @@ def parse_device_request(
     return int(raw_id), udid, params
 
 
-def token_matches(
-    service: Dict[str, Any], presented: Optional[str]
-) -> bool:
+def token_matches(service: Dict[str, Any], presented: Optional[str]) -> bool:
     expected = str(service.get("token") or "")
     if not expected or not presented:
         return False
@@ -240,10 +238,16 @@ def branding_name() -> str:
 
 ICONS_SVG = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "static", "css", "vendor", "icons.svg",
+    "static",
+    "css",
+    "vendor",
+    "icons.svg",
 )
 STATUS_ICONS = (
-    "circle-check", "triangle-exclamation", "circle-exclamation", "circle-info"
+    "circle-check",
+    "triangle-exclamation",
+    "circle-exclamation",
+    "circle-info",
 )
 
 
@@ -266,8 +270,10 @@ def status_icon_symbols() -> Markup:
 def render_device_page(template: str, **context: Any):
     """Render a device-facing page with the organisation's branding."""
     return render_template(
-        template, brand_name=branding_name(),
-        icon_symbols=status_icon_symbols(), **context
+        template,
+        brand_name=branding_name(),
+        icon_symbols=status_icon_symbols(),
+        **context,
     )
 
 
@@ -313,7 +319,11 @@ def reset_rate_limits() -> None:
 def _over_rate_limit(service_name: str, address: str) -> bool:
     now = _now()
     with _rate_lock:
-        times = [t for t in _recent.get((service_name, address), []) if now - t < RATE_WINDOW]
+        times = [
+            t
+            for t in _recent.get((service_name, address), [])
+            if now - t < RATE_WINDOW
+        ]
         if len(times) >= RATE_LIMIT:
             _recent[(service_name, address)] = times
             return True
@@ -415,8 +425,7 @@ def service_run(service_name: str):
     except ScriptExecutionError as err:
         data_store.release_selfserve_run(service["name"], jss_id)
         logthis.error(
-            f"Self-serve {service['name']} failed for device {jss_id}: "
-            f"{err}"
+            f"Self-serve {service['name']} failed for device {jss_id}: {err}"
         )
         return (
             render_device_page(

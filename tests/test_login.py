@@ -4,7 +4,6 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 
-
 def test_successful_login_reaches_dashboard(logged_in_client):
     resp = logged_in_client.get("/dashboard")
     assert resp.status_code == 200
@@ -14,8 +13,11 @@ def test_successful_login_reaches_dashboard(logged_in_client):
 def test_blank_password_is_rejected(client, fake_jamf):
     resp = client.post(
         "/login",
-        data={"url": "https://jamf.example.test", "username": "u",
-              "password": ""},
+        data={
+            "url": "https://jamf.example.test",
+            "username": "u",
+            "password": "",
+        },
     )
     assert resp.status_code == 302
     assert "/logout" in resp.headers["Location"]
@@ -35,6 +37,7 @@ def test_anonymous_home_renders(client):
 def test_login_error_surfaces_when_no_jps_configured(client, jawa_env):
     # server.json with no jps_url is the branch that dropped errors.
     import json
+
     jawa_env.server_file.write_text(json.dumps({"brand": "JAWA"}))
     resp = client.get(
         "/logout?error_title=Authentication+error"
@@ -53,6 +56,7 @@ def test_failed_login_retains_username_and_url(client, jawa_env, fake_jamf):
     # server.json, which is the scenario where retaining the typed URL
     # matters. The default fixture locks a jps_url, so clear it here.
     import json
+
     jawa_env.server_file.write_text(json.dumps({"brand": "JAWA"}))
     resp = client.post(
         "/login",
@@ -76,8 +80,11 @@ def test_prev_url_not_reflected_without_error(client, jawa_env):
     # A bare GET with prev_url but NO failed-login error must NOT
     # pre-fill the JPS URL field (phishing pre-fill prevention).
     import json
+
     jawa_env.server_file.write_text(json.dumps({"brand": "JAWA"}))
-    resp = client.get("/?prev_url=https://evil-jamf.example&prev_username=admin")
+    resp = client.get(
+        "/?prev_url=https://evil-jamf.example&prev_username=admin"
+    )
     body = resp.data.decode()
     assert "https://evil-jamf.example" not in body
     assert 'value="admin"' not in body
@@ -88,6 +95,7 @@ def test_prev_url_not_reflected_via_logout_error_param(client, jawa_env):
     # via /logout query params. Confirm a crafted /logout link canNOT
     # pre-fill the JPS URL / username (no session flash present).
     import json
+
     jawa_env.server_file.write_text(json.dumps({"brand": "JAWA"}))
     resp = client.get(
         "/logout?error_title=x&prev_url=https://evil-jamf.example"
@@ -195,7 +203,9 @@ def test_stale_token_blocks_bogus_login(logged_in_client, monkeypatch):
     assert "/logout" in resp.headers.get("Location", "")
 
 
-def test_verify_jamf_access_rejects_non_jamf_200(client, jawa_env, monkeypatch):
+def test_verify_jamf_access_rejects_non_jamf_200(
+    client, jawa_env, monkeypatch
+):
     # Defense in depth: even if a token were present, a 200 from a
     # non-Jamf site (body not the activationcode JSON shape) must not
     # count as Jamf access. Token endpoint returns a real-looking token
@@ -214,8 +224,10 @@ def test_verify_jamf_access_rejects_non_jamf_200(client, jawa_env, monkeypatch):
 
         def json(self):
             if self.kind == "token":
-                return {"token": "looks-real", "expires":
-                        "2099-01-01T00:00:00.000+0000"}
+                return {
+                    "token": "looks-real",
+                    "expires": "2099-01-01T00:00:00.000+0000",
+                }
             raise ValueError("activationcode body is HTML, not JSON")
 
         def raise_for_status(self):
@@ -245,6 +257,7 @@ def test_failed_login_does_not_reflect_script_injection(
     client, jawa_env, fake_jamf
 ):
     import json
+
     jawa_env.server_file.write_text(json.dumps({"brand": "JAWA"}))
     resp = client.post(
         "/login",
@@ -445,7 +458,10 @@ def test_login_refuses_an_unconfigured_active_url(
     assert resp.status_code == 302
     assert "/dashboard" not in location
     assert "/logout" in location
-    assert "Unrecognized+server" in location or "Unrecognized%20server" in location
+    assert (
+        "Unrecognized+server" in location
+        or "Unrecognized%20server" in location
+    )
 
 
 @pytest.mark.parametrize(
@@ -558,8 +574,11 @@ def test_login_reports_a_jamf_timeout(client, jawa_env, monkeypatch):
     monkeypatch.setattr(requests, "post", _stall)
     resp = client.post(
         "/login",
-        data={"url": "https://jamf.example.test", "username": "u",
-              "password": "p"},
+        data={
+            "url": "https://jamf.example.test",
+            "username": "u",
+            "password": "p",
+        },
     )
     assert "/dashboard" not in resp.headers["Location"]
     page = client.get(resp.headers["Location"], follow_redirects=True)
@@ -586,8 +605,11 @@ def test_login_requests_all_carry_a_timeout(
     monkeypatch.setattr(requests, "get", _get)
     client.post(
         "/login",
-        data={"url": "https://jamf.example.test", "username": "u",
-              "password": "p"},
+        data={
+            "url": "https://jamf.example.test",
+            "username": "u",
+            "password": "p",
+        },
     )
     assert seen and all(t == 30 for t in seen)
 
@@ -609,8 +631,9 @@ def test_near_expiry_token_is_renewed_with_keep_alive(
     def _post(url, **kwargs):
         if url.endswith("/api/v1/auth/keep-alive"):
             calls.append(kwargs)
-            return Resp({"token": "RENEWED",
-                         "expires": "2099-01-01T00:00:00.000+0000"})
+            return Resp(
+                {"token": "RENEWED", "expires": "2099-01-01T00:00:00.000+0000"}
+            )
         return default_post(url, **kwargs)
 
     monkeypatch.setattr(requests, "post", _post)
@@ -639,8 +662,9 @@ def test_any_console_page_renews_a_token_with_ten_minutes_left(
 
     def _post(url, **kwargs):
         if url.endswith("/api/v1/auth/keep-alive"):
-            return Resp({"token": "RENEWED",
-                         "expires": "2099-01-01T00:00:00.000+0000"})
+            return Resp(
+                {"token": "RENEWED", "expires": "2099-01-01T00:00:00.000+0000"}
+            )
         return default_post(url, **kwargs)
 
     monkeypatch.setattr(requests, "post", _post)
@@ -698,6 +722,7 @@ def test_failed_keep_alive_ends_the_session(
 
 def _set_allowed_admins(jawa_env, names):
     import json
+
     data = json.loads(jawa_env.server_file.read_text())
     data["allowed_admins"] = names
     jawa_env.server_file.write_text(json.dumps(data))
@@ -706,8 +731,11 @@ def _set_allowed_admins(jawa_env, names):
 def _sign_in(client, username):
     return client.post(
         "/login",
-        data={"url": "https://jamf.example.test", "username": username,
-              "password": "hunter2"},
+        data={
+            "url": "https://jamf.example.test",
+            "username": username,
+            "password": "hunter2",
+        },
     )
 
 
@@ -743,10 +771,13 @@ def test_setup_saves_allowed_admins_and_keeps_current_user(
     logged_in_client, jawa_env
 ):
     import json
+
     resp = logged_in_client.post(
         "/setup",
-        data={"address": "https://jawa.example.test",
-              "allowed_admins": "alice\nBob, carol"},
+        data={
+            "address": "https://jawa.example.test",
+            "allowed_admins": "alice\nBob, carol",
+        },
     )
     assert resp.status_code == 302
     saved = json.loads(jawa_env.server_file.read_text())["allowed_admins"]
@@ -757,6 +788,7 @@ def test_setup_saves_allowed_admins_and_keeps_current_user(
 
 def _deny_tokens(monkeypatch, jamf_fake_http):
     import requests
+
     response_cls, default_post = jamf_fake_http
 
     def post(url, **kwargs):
@@ -771,11 +803,15 @@ def test_failed_login_logs_client_address(
     client, jawa_env, fake_jamf, monkeypatch, jamf_fake_http
 ):
     import re
+
     _deny_tokens(monkeypatch, jamf_fake_http)
     resp = client.post(
         "/login",
-        data={"url": "https://jamf.example.test", "username": "mallory",
-              "password": "wrong"},
+        data={
+            "url": "https://jamf.example.test",
+            "username": "mallory",
+            "password": "wrong",
+        },
         headers={"X-Real-IP": "203.0.113.9"},
     )
     assert resp.status_code == 302
@@ -794,9 +830,11 @@ def test_failed_login_log_line_cannot_be_forged_by_the_user_name(
     _deny_tokens(monkeypatch, jamf_fake_http)
     client.post(
         "/login",
-        data={"url": "https://jamf.example.test",
-              "username": "x ip=198.51.100.1\nLOGIN FAILED user=y",
-              "password": "wrong"},
+        data={
+            "url": "https://jamf.example.test",
+            "username": "x ip=198.51.100.1\nLOGIN FAILED user=y",
+            "password": "wrong",
+        },
         headers={"X-Real-IP": "203.0.113.9"},
     )
     lines = (jawa_env.data_dir / "jawa-auth.log").read_text().splitlines()
@@ -811,8 +849,11 @@ def test_failed_login_falls_back_to_the_socket_address(
     _deny_tokens(monkeypatch, jamf_fake_http)
     client.post(
         "/login",
-        data={"url": "https://jamf.example.test", "username": "u",
-              "password": "wrong"},
+        data={
+            "url": "https://jamf.example.test",
+            "username": "u",
+            "password": "wrong",
+        },
     )
     line = (jawa_env.data_dir / "jawa-auth.log").read_text()
     assert " ip=127.0.0.1" in line
@@ -820,6 +861,7 @@ def test_failed_login_falls_back_to_the_socket_address(
 
 def test_successful_login_writes_no_failure_line(client, jawa_env, fake_jamf):
     _sign_in(client, "alice")
-    assert not (jawa_env.data_dir / "jawa-auth.log").exists() or not (
-        jawa_env.data_dir / "jawa-auth.log"
-    ).read_text()
+    assert (
+        not (jawa_env.data_dir / "jawa-auth.log").exists()
+        or not (jawa_env.data_dir / "jawa-auth.log").read_text()
+    )

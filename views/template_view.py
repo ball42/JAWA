@@ -113,6 +113,8 @@ def _ensure_scripts_dir() -> None:
     JAWA has no record of, and every retry gets HTTP 409.
     """
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
+
+
 WEBHOOKS_FILE = os.path.join(BASE_DIR, "data", "webhooks.json")
 CREDENTIALS_FILE = os.path.join(BASE_DIR, "data", "credentials.json")
 
@@ -502,9 +504,7 @@ def _create_jamf_webhook(webhook_name: str, xml_data: str) -> str:
             timeout=30,
         )
     except requests.exceptions.Timeout as err:
-        logthis.error(
-            f"Timeout creating Jamf webhook {webhook_name}: {err}"
-        )
+        logthis.error(f"Timeout creating Jamf webhook {webhook_name}: {err}")
         raise AutomationError(
             "Connection Timeout",
             f"Request to Jamf Pro timed out after 30 seconds. {err}",
@@ -581,8 +581,7 @@ def _validate_package(package: dict) -> Union[str, None]:
         # legitimately rely on a runtime global. Bundled scripts are
         # held to the stricter F821 bar by the catalog tests.
         return (
-            f"Script does not parse as Python "
-            f"(line {err.lineno}): {err.msg}"
+            f"Script does not parse as Python (line {err.lineno}): {err.msg}"
         )
     except (ValueError, TypeError) as err:
         # e.g. embedded NUL bytes in the uploaded content.
@@ -707,16 +706,24 @@ def download_script(slug: str) -> Union[Response, str]:
     )
 
 
-BRANDER_ASSETS_DIR = os.path.join(BASE_DIR, "data", "workflows", "assets", "brander")
+BRANDER_ASSETS_DIR = os.path.join(
+    BASE_DIR, "data", "workflows", "assets", "brander"
+)
 
 
 def _template_path_options() -> List[str]:
     """Suggestions for Brander's template setting: legacy, the template and
     set files shipped in its assets folder, and this tenant's stored
     templates (store:<slug>)."""
-    shipped = sorted(
-        name for name in os.listdir(BRANDER_ASSETS_DIR) if name.endswith(".json")
-    ) if os.path.isdir(BRANDER_ASSETS_DIR) else []
+    shipped = (
+        sorted(
+            name
+            for name in os.listdir(BRANDER_ASSETS_DIR)
+            if name.endswith(".json")
+        )
+        if os.path.isdir(BRANDER_ASSETS_DIR)
+        else []
+    )
     stored = [
         f"store:{entry['slug']}"
         for entry in brander_store.list_templates(session.get("url", ""))
@@ -744,9 +751,7 @@ def _enable_selfserve(workflow: Dict[str, Any], credentials: list):
                 link="/setup",
                 link_text="Go to Setup",
             )
-        src_path = os.path.join(
-            TEMPLATE_SCRIPTS_DIR, workflow["script_file"]
-        )
+        src_path = os.path.join(TEMPLATE_SCRIPTS_DIR, workflow["script_file"])
         if not os.path.isfile(src_path):
             raise AutomationError(
                 "Script not found",
@@ -782,7 +787,10 @@ def _enable_selfserve(workflow: Dict[str, Any], credentials: list):
 
     dest_path = _write_script(name, script_content)
     entry = build_service_entry(
-        name, dest_path, merged, session_data,
+        name,
+        dest_path,
+        merged,
+        session_data,
         description=workflow.get("description", ""),
     )
     register_profile(
@@ -829,9 +837,7 @@ def _enable_cron(workflow: Dict[str, Any], credentials: list):
             )
         if not schedule:
             raise AutomationError("Error", "Enter a schedule.")
-        src_path = os.path.join(
-            TEMPLATE_SCRIPTS_DIR, workflow["script_file"]
-        )
+        src_path = os.path.join(TEMPLATE_SCRIPTS_DIR, workflow["script_file"])
         if not os.path.isfile(src_path):
             raise AutomationError(
                 "Script not found",
@@ -956,9 +962,7 @@ def enable_template(slug: str) -> Union[Response, str]:
             )
 
         # trigger_event is null for any-event templates: the form asks.
-        event = workflow.get("trigger_event") or request.form.get(
-            "event", ""
-        )
+        event = workflow.get("trigger_event") or request.form.get("event", "")
         if not event:
             raise AutomationError(
                 "Error", "Choose the Jamf Pro event to listen for."
@@ -974,9 +978,7 @@ def enable_template(slug: str) -> Union[Response, str]:
                 link_text="Go to Setup",
             )
 
-        src_path = os.path.join(
-            TEMPLATE_SCRIPTS_DIR, workflow["script_file"]
-        )
+        src_path = os.path.join(TEMPLATE_SCRIPTS_DIR, workflow["script_file"])
         if not os.path.isfile(src_path):
             raise AutomationError(
                 "Script not found",
@@ -997,9 +999,7 @@ def enable_template(slug: str) -> Union[Response, str]:
 
         fresh_token()
 
-        notice, instructions, enablement, extra_xml = _smart_group_info(
-            event
-        )
+        notice, instructions, enablement, extra_xml = _smart_group_info(event)
         auth_xml = _build_auth_xml(request.form)
         (
             webhook_user,
@@ -1197,9 +1197,7 @@ def import_template() -> Union[Response, Dict[str, Any]]:
 
         fresh_token()
 
-        notice, instructions, enablement, extra_xml = _smart_group_info(
-            event
-        )
+        notice, instructions, enablement, extra_xml = _smart_group_info(event)
         # The same helpers as the enable path, so the XML JAWA sends and
         # the credentials JAWA stores derive from one place. Hardcoding
         # the pair is how they drift into telling Jamf NONE while storing

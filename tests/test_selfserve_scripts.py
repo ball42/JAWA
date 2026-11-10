@@ -91,12 +91,18 @@ def test_rts_fetches_the_named_wifi_profile_from_jamf(rts_module):
 
     def fake_api(endpoint, method="GET", data=None, api="classic"):
         seen["endpoint"] = endpoint
-        return {"configuration_profile": {"general": {"payloads": (
-            '<?xml version="1.0" encoding="UTF-8"?><plist version="1">'
-            "<dict><key>PayloadContent</key><array><dict>"
-            "<key>PayloadType</key><string>com.apple.wifi.managed</string>"
-            "</dict></array></dict></plist>"
-        )}}}
+        return {
+            "configuration_profile": {
+                "general": {
+                    "payloads": (
+                        '<?xml version="1.0" encoding="UTF-8"?><plist version="1">'
+                        "<dict><key>PayloadContent</key><array><dict>"
+                        "<key>PayloadType</key><string>com.apple.wifi.managed</string>"
+                        "</dict></array></dict></plist>"
+                    )
+                }
+            }
+        }
 
     rts_module.perform_api_call = fake_api
     plist = rts_module.fetch_wifi_profile_plist("Managed WiFi - MCP")
@@ -108,10 +114,14 @@ def test_rts_fetches_the_named_wifi_profile_from_jamf(rts_module):
 
 def test_rts_refuses_a_profile_that_is_not_wifi(rts_module):
     rts_module.perform_api_call = lambda *a, **k: {
-        "configuration_profile": {"general": {"payloads": (
-            "<plist><dict><key>PayloadType</key>"
-            "<string>com.apple.webClip.managed</string></dict></plist>"
-        )}}
+        "configuration_profile": {
+            "general": {
+                "payloads": (
+                    "<plist><dict><key>PayloadType</key>"
+                    "<string>com.apple.webClip.managed</string></dict></plist>"
+                )
+            }
+        }
     }
     with pytest.raises(SystemExit) as excinfo:
         rts_module.fetch_wifi_profile_plist("Web Clip")
@@ -137,11 +147,17 @@ def test_rts_exits_when_the_wifi_profile_is_missing(rts_module):
 # (Jamf Setup), so it is untrusted: "../x" or an absolute path used to select
 # any .png on the JAWA host as the wallpaper background.
 
+
 @pytest.fixture()
 def role_assets(tmp_path, brander_module):
     assets = tmp_path / "assets"
     assets.mkdir()
-    for name in ("lockscreen-template", "null", "videoconferencing", "nursing"):
+    for name in (
+        "lockscreen-template",
+        "null",
+        "videoconferencing",
+        "nursing",
+    ):
         (assets / f"{name}.png").write_bytes(b"png")
     (tmp_path / "secret.png").write_bytes(b"outside the assets dir")
     brander_module.ASSETS_DIR = str(assets)
@@ -150,13 +166,26 @@ def role_assets(tmp_path, brander_module):
 
 
 def _device(role):
-    return {"extension_attributes": [{"id": 7, "name": "Setup Role", "value": role}]}
+    return {
+        "extension_attributes": [
+            {"id": 7, "name": "Setup Role", "value": role}
+        ]
+    }
 
 
-@pytest.mark.parametrize("role", [
-    "../secret", "..", "../../secret", "..%2fsecret", "/tmp/secret", "nursing/../../secret",
-    "x" * 65, "Nürsing",
-])
+@pytest.mark.parametrize(
+    "role",
+    [
+        "../secret",
+        "..",
+        "../../secret",
+        "..%2fsecret",
+        "/tmp/secret",
+        "nursing/../../secret",
+        "x" * 65,
+        "Nürsing",
+    ],
+)
 def test_brander_role_cannot_escape_the_assets_directory(role_assets, role):
     module, _ = role_assets
     basename, _label = module.find_role(_device(role))
@@ -165,17 +194,22 @@ def test_brander_role_cannot_escape_the_assets_directory(role_assets, role):
 
 def test_brander_role_symlink_out_of_assets_is_refused(role_assets):
     module, tmp_path = role_assets
-    os.symlink(tmp_path / "secret.png", os.path.join(module.ASSETS_DIR, "evil.png"))
+    os.symlink(
+        tmp_path / "secret.png", os.path.join(module.ASSETS_DIR, "evil.png")
+    )
     basename, _label = module.find_role(_device("evil"))
     assert basename == "lockscreen-template"
 
 
-@pytest.mark.parametrize("role,expected", [
-    ("Video Conferencing", "videoconferencing"),
-    ("NURSING", "nursing"),
-    ("Pharmacist", "lockscreen-template"),  # no image shipped for it
-    ("", "null"),
-])
+@pytest.mark.parametrize(
+    "role,expected",
+    [
+        ("Video Conferencing", "videoconferencing"),
+        ("NURSING", "nursing"),
+        ("Pharmacist", "lockscreen-template"),  # no image shipped for it
+        ("", "null"),
+    ],
+)
 def test_brander_real_roles_still_match(role_assets, role, expected):
     module, _ = role_assets
     assert module.find_role(_device(role))[0] == expected

@@ -45,9 +45,7 @@ def _get_form_value(form: Any, key: str, default: str = "null") -> str:
     return value if value else default
 
 
-NO_ADDRESS_HINT = (
-    "Set the JAWA server address in Setup to see the full URL"
-)
+NO_ADDRESS_HINT = "Set the JAWA server address in Setup to see the full URL"
 
 
 def hook_url(name: str) -> Optional[str]:

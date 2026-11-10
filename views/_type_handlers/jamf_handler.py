@@ -499,14 +499,18 @@ class JamfHandler(AutomationHandler):
                 f"Request to Jamf Pro server timed out after 30 seconds. {err}",
             )
         except requests.exceptions.ConnectionError as err:
-            logthis.error(f"Connection error editing Jamf webhook {new_name}: {err}")
+            logthis.error(
+                f"Connection error editing Jamf webhook {new_name}: {err}"
+            )
             raise AutomationError(
                 "Connection Error",
                 f"The request could not be sent to your Jamf Pro server, "
                 f"check your network connection. Details: {err}",
             )
         except Exception as err:
-            logthis.error(f"Unexpected error editing Jamf webhook {new_name}: {err}")
+            logthis.error(
+                f"Unexpected error editing Jamf webhook {new_name}: {err}"
+            )
             raise AutomationError(
                 "Connection Error",
                 f"The request could not be sent to your Jamf Pro server, "

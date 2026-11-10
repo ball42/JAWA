@@ -239,9 +239,7 @@ def script_results(webhook_data: JSONType, each_webhook: Dict) -> bytes:
         # script that exited 0 must not be turned into a failure by the
         # bytes it chose to print. Strict decode here raised before the
         # response path was ever reached.
-        for each_line in output.decode(
-            "utf-8", errors="replace"
-        ).split("\n"):
+        for each_line in output.decode("utf-8", errors="replace").split("\n"):
             if each_line:
                 logthis.info(f"{each_webhook.get('name')} - {each_line}")
 

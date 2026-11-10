@@ -111,9 +111,7 @@ def test_main_binds_loopback_by_default(jawa_env, monkeypatch):
 
     monkeypatch.delenv("JAWA_BIND", raising=False)
     calls = []
-    monkeypatch.setattr(
-        jawa_app, "serve", lambda *a, **kw: calls.append(kw)
-    )
+    monkeypatch.setattr(jawa_app, "serve", lambda *a, **kw: calls.append(kw))
     monkeypatch.setattr(jawa_app, "environment_setup", lambda d: None)
     monkeypatch.setattr(jawa_app, "register_blueprints", lambda: None)
     jawa_app.main()

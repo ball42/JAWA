@@ -75,8 +75,12 @@ class FakeJamf:
         jps_id = int(path.rsplit("/", 1)[1])
         general, eas = self.devices[jps_id]
         return FakeResponse(
-            {"mobile_device": {"general": dict(general),
-                               "extension_attributes": list(eas)}}
+            {
+                "mobile_device": {
+                    "general": dict(general),
+                    "extension_attributes": list(eas),
+                }
+            }
         )
 
 
@@ -94,7 +98,10 @@ class FakeRun:
         if jps_id in self.timeout_ids:
             raise subprocess.TimeoutExpired(argv, kwargs.get("timeout"))
         return subprocess.CompletedProcess(
-            argv, self.codes.get(jps_id, 0), stdout="Brander said ok\n", stderr=""
+            argv,
+            self.codes.get(jps_id, 0),
+            stdout="Brander said ok\n",
+            stderr="",
         )
 
 
@@ -145,7 +152,12 @@ def watch(tmp_path, monkeypatch):
         return dict(found) if found else None
 
     return types.SimpleNamespace(
-        jamf=jamf, run=run, db=db, brander=brander, load=load, main=main,
+        jamf=jamf,
+        run=run,
+        db=db,
+        brander=brander,
+        load=load,
+        main=main,
         row=row,
     )
 
@@ -172,7 +184,9 @@ def test_asset_tag_change_brands_with_id_and_udid(watch, capsys):
     argv, kwargs = watch.run.calls[0]
     assert argv[0] == sys.executable
     assert argv[1] == str(watch.brander)
-    assert json.loads(argv[2]) == {"event": {"jssID": 42, "udid": "ABC-UDID-42"}}
+    assert json.loads(argv[2]) == {
+        "event": {"jssID": 42, "udid": "ABC-UDID-42"}
+    }
     assert kwargs["timeout"] == 300
     stored = watch.row(42)
     assert stored["current_asset_tag"] == "A2"
@@ -195,7 +209,10 @@ def test_brander_ea_change_brands(watch, capsys):
     assert code == 0
     assert len(watch.run.calls) == 1
     stored = watch.row(5)
-    assert (stored["current_brander_ea"], stored["previous_brander_ea"]) == ("On", "Off")
+    assert (stored["current_brander_ea"], stored["previous_brander_ea"]) == (
+        "On",
+        "Off",
+    )
     assert stored["brander_ea_change_count"] == 1
     assert stored["asset_tag_change_count"] == 0
     assert "device 5: Brander EA 'Off' -> 'On'" in out
@@ -211,7 +228,9 @@ def test_barcode_fallback(watch, capsys):
     assert watch.row(3)["current_asset_tag"] == "BC1"
 
 
-@pytest.mark.parametrize("empty", ["", "  ", "null", "NULL", "None", "N/A", "n/a"])
+@pytest.mark.parametrize(
+    "empty", ["", "  ", "null", "NULL", "None", "N/A", "n/a"]
+)
 def test_empty_spellings_are_all_empty(watch, capsys, empty):
     watch.jamf.device(9, asset_tag="", brander="")
     watch.main(capsys)
@@ -339,7 +358,7 @@ def _canonical(path):
     source = open(path, encoding="utf-8").read()
     start = source.index("# --- JAWA canonical Jamf API block")
     end = source.index("# --- end canonical block ---")
-    return source[start:end + len("# --- end canonical block ---")]
+    return source[start : end + len("# --- end canonical block ---")]
 
 
 def test_canonical_block_is_byte_identical_to_self_serve_brander():
@@ -381,7 +400,9 @@ def test_enabling_creates_a_timed_automation(
     # The optional settings left blank take their catalog defaults.
     for key in ("brander_script", "db_path", "dry_run"):
         form[key] = ""
-    resp = logged_in_client.post("/templates/asset-tag-brander/enable", data=form)
+    resp = logged_in_client.post(
+        "/templates/asset-tag-brander/enable", data=form
+    )
 
     assert resp.status_code == 302
     assert "/error" not in resp.headers["Location"]
@@ -389,7 +410,8 @@ def test_enabling_creates_a_timed_automation(
     assert entry is not None
     assert data_store.get_webhook_by_name("asset-tag-brander") is None
     line = next(
-        row for row in tab.written.splitlines()
+        row
+        for row in tab.written.splitlines()
         if row.endswith("# asset-tag-brander")
     )
     assert line.startswith("*/15 * * * * ")
@@ -399,8 +421,13 @@ def test_enabling_creates_a_timed_automation(
     assert "__JAWA_" not in deployed
     namespace = {}
     exec(compile(deployed, entry["script"], "exec"), namespace)
-    assert namespace["BRANDER_SCRIPT"] == "/usr/local/jawa/scripts/brand-device.py"
-    assert namespace["DB_PATH"] == "/usr/local/jawa/data/asset_tag_watch.sqlite"
+    assert (
+        namespace["BRANDER_SCRIPT"]
+        == "/usr/local/jawa/scripts/brand-device.py"
+    )
+    assert (
+        namespace["DB_PATH"] == "/usr/local/jawa/data/asset_tag_watch.sqlite"
+    )
     assert namespace["DRY_RUN"] == "no"
     assert namespace["Config"]().server_url == form["server_url"]
 
@@ -408,7 +435,9 @@ def test_enabling_creates_a_timed_automation(
 def test_enabling_honours_a_chosen_schedule(
     logged_in_client, jawa_env, enable_form, tab
 ):
-    form = enable_form("asset-tag-brander", webhook_name="watch-5", schedule="*/5 * * * *")
+    form = enable_form(
+        "asset-tag-brander", webhook_name="watch-5", schedule="*/5 * * * *"
+    )
     logged_in_client.post("/templates/asset-tag-brander/enable", data=form)
     line = next(r for r in tab.written.splitlines() if r.endswith("# watch-5"))
     assert line.startswith("*/5 * * * * ")
@@ -417,16 +446,26 @@ def test_enabling_honours_a_chosen_schedule(
 def test_a_bad_schedule_writes_nothing(
     logged_in_client, jawa_env, enable_form, tab
 ):
-    form = enable_form("asset-tag-brander", webhook_name="bad-watch", schedule="every so often")
-    resp = logged_in_client.post("/templates/asset-tag-brander/enable", data=form)
+    form = enable_form(
+        "asset-tag-brander",
+        webhook_name="bad-watch",
+        schedule="every so often",
+    )
+    resp = logged_in_client.post(
+        "/templates/asset-tag-brander/enable", data=form
+    )
     assert "/error" in resp.headers["Location"]
     assert tab.written is None
     assert data_store.get_cron_by_name("bad-watch") is None
     assert not os.listdir(str(jawa_env.scripts_dir))
 
 
-def test_enable_form_offers_a_schedule_and_no_webhook_auth(logged_in_client, jawa_env):
-    body = logged_in_client.get("/templates/asset-tag-brander/enable").get_data(as_text=True)
+def test_enable_form_offers_a_schedule_and_no_webhook_auth(
+    logged_in_client, jawa_env
+):
+    body = logged_in_client.get(
+        "/templates/asset-tag-brander/enable"
+    ).get_data(as_text=True)
     assert 'name="schedule"' in body
     assert 'value="*/15 * * * *"' in body
     assert 'name="event"' not in body
