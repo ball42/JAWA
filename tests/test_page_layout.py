@@ -1,20 +1,25 @@
-"""J41 page layout: tool and short pages use the compact hero, the log
-page fills the window, and the log toolbar has a phone level menu."""
+"""J41 page layout: one compact hero band everywhere, the log page fills
+the window, and the log toolbar has a phone level menu."""
 
 import pytest
+from flask import render_template_string
 
 
-@pytest.mark.parametrize("path", ["/log/home.html", "/search?q=x", "/branding", "/cleanup",
-                                  "/setup/credentials", "/resources/files"])
-def test_short_and_tool_pages_use_the_compact_hero(logged_in_client, jawa_env, path):
+def test_the_hero_macro_renders_the_band():
+    from app import app
+    with app.test_request_context():
+        html = render_template_string(
+            '{% from "shared/_macros.html" import hero_section %}'
+            '{{ hero_section(title="T", subtitle="S", create_url="/x", create_label="Go") }}'
+        )
+    assert '<div class="hero-section">' in html and 'class="hero-cta"' in html
+
+
+@pytest.mark.parametrize("path", ["/dashboard", "/log/home.html", "/setup", "/resources/files"])
+def test_pages_use_the_single_hero_style(logged_in_client, jawa_env, path):
     body = logged_in_client.get(path).get_data(as_text=True)
-    assert 'class="hero-section hero-section--compact"' in body
-
-
-@pytest.mark.parametrize("path", ["/dashboard", "/automations", "/setup", "/templates"])
-def test_list_and_form_pages_keep_the_full_hero(logged_in_client, jawa_env, path):
-    body = logged_in_client.get(path).get_data(as_text=True)
-    assert "hero-section--compact" not in body
+    assert 'class="hero-section"' in body
+    assert "hero-section--" not in body
 
 
 def test_the_log_page_fills_the_window(logged_in_client, jawa_env):

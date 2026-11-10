@@ -2032,16 +2032,17 @@ a.btn-form-cancel:visited {
 
 /* ===== Dark mode ===== */
 /* ===== Page layout (J41) ===== */
-/* Compact hero band for tool and short pages: title and subtitle on the
-   left, buttons on the right, about half the height of the full hero. */
+/* Hero band: title and subtitle on the left, buttons on the right. Every
+   page uses this compact band (J41); the older 3rem hero rules above are
+   overridden here. */
 /* The fixed nav is ~72px tall but body padding reserves 56px, so the
    top padding carries the extra 16px. */
-.hero-section--compact {
+.hero-section {
     padding: var(--space-6) 0 var(--space-4);
     margin-bottom: var(--space-5);
 }
 
-.hero-section--compact .container {
+.hero-section .container {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "title cta" "sub cta";
@@ -2049,47 +2050,47 @@ a.btn-form-cancel:visited {
     align-items: center;
 }
 
-.hero-section--compact h2 {
+.hero-section h2 {
     grid-area: title;
     font-size: 1.5rem;
     letter-spacing: -0.5px;
     margin: 0;
 }
 
-.hero-section--compact p {
+.hero-section p {
     grid-area: sub;
     font-size: 0.95rem;
 }
 
-.hero-section--compact .hero-cta {
+.hero-section .hero-cta {
     grid-area: cta;
     margin-top: 0;
 }
 
-.hero-section--compact .hero-cta .btn {
+.hero-section .hero-cta .btn {
     padding: 0.4rem 1.1rem;
 }
 
 @media (max-width: 767px) {
-    .hero-section--compact {
+    .hero-section {
         padding: var(--space-5) 0 var(--space-4);
     }
 
-    .hero-section--compact .container {
+    .hero-section .container {
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "title" "sub" "cta";
     }
 
-    .hero-section--compact h2 {
+    .hero-section h2 {
         font-size: 1.35rem;
     }
 
-    .hero-section--compact .hero-cta {
+    .hero-section .hero-cta {
         margin-top: var(--space-3);
         gap: var(--space-2);
     }
 
-    .hero-section--compact .hero-cta .btn {
+    .hero-section .hero-cta .btn {
         padding: 0.35rem 0.9rem;
         font-size: 0.9rem;
     }
