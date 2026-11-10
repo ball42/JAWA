@@ -2125,7 +2125,6 @@ a.btn-form-cancel:visited {
     .form-section,
     .card,
     .modal-content,
-    .login-form-container .alert-warning,
     .copy-field-box {
         color: var(--color-text);
     }
@@ -2148,6 +2147,18 @@ a.btn-form-cancel:visited {
 
     .alert-warning {
         color: #2a2000;
+    }
+
+    /* The sign-in warning forces a pale fill in light mode; give it a dark
+       fill here so its heading and message stay readable. */
+    .login-form-container .alert-warning {
+        background: #3a3020 !important;
+        border-color: #6b5a33 !important;
+        color: #f5e6c4;
+    }
+
+    .login-form-container .alert-warning .text-wrap {
+        color: #f5e6c4;
     }
 
     .alert-danger {
