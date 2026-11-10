@@ -90,9 +90,7 @@ def test_parse_device_request_lifts_reserved_and_keeps_the_rest():
     assert params == {"DEVICENAME": "iPad-042"}
 
 
-@pytest.mark.parametrize(
-    "missing", ["id", "udid"], ids=["no-id", "no-udid"]
-)
+@pytest.mark.parametrize("missing", ["id", "udid"], ids=["no-id", "no-udid"])
 def test_parse_device_request_requires_id_and_udid(missing):
     query = dict(GOOD_QUERY)
     del query[missing]
@@ -158,15 +156,14 @@ def test_get_renders_confirmation_with_filled_placeholders(
     assert fake_popen.calls == []
 
 
-def test_get_accepts_semicolon_separated_query(
-    client, jawa_env, fake_popen
-):
+def test_get_accepts_semicolon_separated_query(client, jawa_env, fake_popen):
     """The web clip URL Jamf deploys uses ';' between parameters (Jamf
     rejects '&' inside a web clip payload), and Werkzeug only splits
     on '&' -- so the receiver parses the raw query string itself."""
     _make_service(jawa_env)
     resp = client.get(
-        "/selfserve/reset-ipad?token=" + TOKEN
+        "/selfserve/reset-ipad?token="
+        + TOKEN
         + ";id=42;udid=00008030-000A1B2C3D4E5F67;DEVICENAME=iPad%20042"
     )
     assert resp.status_code == 200
@@ -180,7 +177,8 @@ def test_get_still_accepts_ampersand_separated_query(
 ):
     _make_service(jawa_env)
     resp = client.get(
-        "/selfserve/reset-ipad?token=" + TOKEN
+        "/selfserve/reset-ipad?token="
+        + TOKEN
         + "&id=42&udid=00008030-000A1B2C3D4E5F67&DEVICENAME=iPad-042"
     )
     assert resp.status_code == 200
@@ -294,9 +292,7 @@ def test_get_without_udid_is_400(client, jawa_env, fake_popen):
     assert resp.status_code == 400
 
 
-def test_get_with_non_ascii_token_is_401_not_500(
-    client, jawa_env, fake_popen
-):
+def test_get_with_non_ascii_token_is_401_not_500(client, jawa_env, fake_popen):
     """hmac.compare_digest raises TypeError on non-ASCII str input;
     token_matches must compare as bytes so a bad token is a 401, not
     an unhandled 500."""
@@ -387,9 +383,7 @@ def test_post_with_bad_token_is_401_and_runs_nothing(
     assert fake_popen.calls == []
 
 
-def test_post_without_id_is_400_and_runs_nothing(
-    client, jawa_env, fake_popen
-):
+def test_post_without_id_is_400_and_runs_nothing(client, jawa_env, fake_popen):
     _make_service(jawa_env)
     data = dict(GOOD_QUERY)
     del data["id"]
@@ -413,9 +407,7 @@ def _back_form_fields(body):
         re.S,
     )
     assert form, "result page has no way back to the start page"
-    return dict(
-        re.findall(r'name="([^"]+)" value="([^"]*)"', form.group(1))
-    )
+    return dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form.group(1)))
 
 
 @pytest.mark.parametrize("return_code, status", [(0, 200), (20, 500)])
@@ -473,12 +465,14 @@ def test_remote_address_falls_back_to_the_connection(client, jawa_env):
 
     app = Flask(__name__)
     with app.test_request_context(
-        "/", headers={"X-Forwarded-For": "10.9.9.9"},
+        "/",
+        headers={"X-Forwarded-For": "10.9.9.9"},
         environ_base={"REMOTE_ADDR": "198.51.100.4"},
     ):
         assert ssr._remote_address() == "198.51.100.4"
     with app.test_request_context(
-        "/", headers={"X-Real-IP": "203.0.113.9"},
+        "/",
+        headers={"X-Real-IP": "203.0.113.9"},
         environ_base={"REMOTE_ADDR": "198.51.100.4"},
     ):
         assert ssr._remote_address() == "203.0.113.9"

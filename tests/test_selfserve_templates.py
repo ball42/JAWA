@@ -49,7 +49,11 @@ def test_catalog_and_detail_label_selfserve_trigger(
     logged_in_client, jawa_env, selfserve_workflow
 ):
     slug = selfserve_workflow["slug"]
-    for path in ("/templates", f"/templates/{slug}", f"/templates/{slug}/enable"):
+    for path in (
+        "/templates",
+        f"/templates/{slug}",
+        f"/templates/{slug}/enable",
+    ):
         body = logged_in_client.get(path).get_data(as_text=True)
         assert "Self-serve (web clip)" in body, path
         assert ">None<" not in body
@@ -312,9 +316,7 @@ def test_preview_renders_without_running(
     import subprocess
 
     calls = []
-    monkeypatch.setattr(
-        subprocess, "Popen", lambda *a, **k: calls.append(a)
-    )
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: calls.append(a))
     jawa_env.add_webhook(dict(_SERVICE))
     resp = logged_in_client.get(
         f"/automations/selfserve/reset-ipad/preview?state={state}"

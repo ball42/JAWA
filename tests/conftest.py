@@ -113,9 +113,7 @@ def fake_jamf(monkeypatch):
     """Fake every outbound HTTP verb JAWA uses against Jamf Pro."""
     monkeypatch.setattr(requests, "post", _fake_jamf_post)
     monkeypatch.setattr(requests, "get", _fake_jamf_get)
-    monkeypatch.setattr(
-        requests, "put", lambda *a, **k: FakeJamfResponse({})
-    )
+    monkeypatch.setattr(requests, "put", lambda *a, **k: FakeJamfResponse({}))
     monkeypatch.setattr(
         requests, "delete", lambda *a, **k: FakeJamfResponse({})
     )

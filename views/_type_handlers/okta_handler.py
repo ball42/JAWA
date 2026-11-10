@@ -141,13 +141,17 @@ class OktaHandler(AutomationHandler):
                 f"Request to Okta server timed out after 30 seconds. {err}",
             )
         except requests.exceptions.ConnectionError as err:
-            logthis.error(f"Connection error creating Okta webhook {okta_name}: {err}")
+            logthis.error(
+                f"Connection error creating Okta webhook {okta_name}: {err}"
+            )
             raise AutomationError(
                 "Connection Error",
                 f"Could not connect to Okta server. Check network connectivity. {err}",
             )
         except Exception as err:
-            logthis.error(f"Unexpected error creating Okta webhook {okta_name}: {err}")
+            logthis.error(
+                f"Unexpected error creating Okta webhook {okta_name}: {err}"
+            )
             raise AutomationError(
                 "API Error", f"Failed to create webhook in Okta. {err}"
             )
@@ -205,19 +209,28 @@ class OktaHandler(AutomationHandler):
                 f"Verification request timed out after 30 seconds. {err}",
             )
         except requests.exceptions.ConnectionError as err:
-            logthis.error(f"Connection error verifying Okta webhook {okta_name}: {err}")
+            logthis.error(
+                f"Connection error verifying Okta webhook {okta_name}: {err}"
+            )
             raise AutomationError(
                 "Connection Error",
                 f"Could not connect to Okta for verification. {err}",
             )
         except json.JSONDecodeError as err:
-            logthis.error(f"Invalid verification response for webhook {okta_name}: {err}")
+            logthis.error(
+                f"Invalid verification response for webhook {okta_name}: {err}"
+            )
             raise AutomationError(
-                "API Error", f"Okta returned invalid verification response. {err}"
+                "API Error",
+                f"Okta returned invalid verification response. {err}",
             )
         except Exception as err:
-            logthis.error(f"Unexpected error verifying Okta webhook {okta_name}: {err}")
-            raise AutomationError("API Error", f"Failed to verify webhook. {err}")
+            logthis.error(
+                f"Unexpected error verifying Okta webhook {okta_name}: {err}"
+            )
+            raise AutomationError(
+                "API Error", f"Failed to verify webhook. {err}"
+            )
 
         if "errorCode" in verification:
             logthis.warning(

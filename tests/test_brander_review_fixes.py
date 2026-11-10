@@ -22,7 +22,9 @@ JAMF_URL = "https://jamf.example.test"
 
 @pytest.fixture()
 def store_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(store, "STORE_DIR", str(tmp_path / "brander_templates"))
+    monkeypatch.setattr(
+        store, "STORE_DIR", str(tmp_path / "brander_templates")
+    )
     return tmp_path / "brander_templates"
 
 
@@ -49,7 +51,9 @@ def test_uploads_continue_after_the_index_is_lost(store_dir, damage):
 
 
 def test_a_crafted_screen_value_is_refused_not_a_crash(store_dir):
-    pkg, problems = store.validate_package(package(template=dict(TEMPLATE, screen=["x"])))
+    pkg, problems = store.validate_package(
+        package(template=dict(TEMPLATE, screen=["x"]))
+    )
     assert pkg is None and any("screen" in p for p in problems)
 
 
@@ -61,8 +65,14 @@ def test_the_script_exits_30_on_a_crafted_template(jamf, tmp_path):  # noqa: F81
 # --- tenant keys ignore default ports ----------------------------------------------
 
 
-@pytest.mark.parametrize("url", ["https://x.jamfcloud.com", "https://x.jamfcloud.com:443/",
-                                 "HTTPS://X.jamfcloud.com"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://x.jamfcloud.com",
+        "https://x.jamfcloud.com:443/",
+        "HTTPS://X.jamfcloud.com",
+    ],
+)
 def test_default_ports_do_not_change_the_tenant(url):
     assert store.tenant_key(url) == "x.jamfcloud.com"
     assert load_brander().tenant_key(url) == "x.jamfcloud.com"
@@ -122,8 +132,13 @@ def test_a_bad_setting_does_not_leave_a_refreshed_script(tmp_path):
     path = deployed(tmp_path)
     text = open(path).read().replace("def preflight", "def _old_preflight")
     open(path, "w").write(text)
-    form = {"brander_refresh": "on", "brander_template_path": "legacy", "brander_max_kb": "5",
-            "brander_wallpaper_setting": "3", "brander_allow_person_fields": "no"}
+    form = {
+        "brander_refresh": "on",
+        "brander_template_path": "legacy",
+        "brander_max_kb": "5",
+        "brander_wallpaper_setting": "3",
+        "brander_allow_person_fields": "no",
+    }
     with pytest.raises(AutomationError):
         _apply_brander_settings(path, form)
     assert open(path).read() == text
@@ -150,8 +165,14 @@ def test_json_writes_are_atomic(tmp_path, monkeypatch):
 # --- the unauthenticated confirm POST is rate-limited ---------------------------------
 
 
-def test_confirm_posts_are_rate_limited_per_address(client, jawa_env, monkeypatch):
-    from tests.test_selfserve_receiver import GOOD_QUERY, RecordingPopen, _make_service
+def test_confirm_posts_are_rate_limited_per_address(
+    client, jawa_env, monkeypatch
+):
+    from tests.test_selfserve_receiver import (
+        GOOD_QUERY,
+        RecordingPopen,
+        _make_service,
+    )
     from webhook import selfserve_receiver
     import subprocess
 
@@ -162,15 +183,25 @@ def test_confirm_posts_are_rate_limited_per_address(client, jawa_env, monkeypatc
     selfserve_receiver.reset_rate_limits()
     _make_service(jawa_env)
     statuses = [
-        client.post("/selfserve/reset-ipad", data=dict(GOOD_QUERY, id=str(100 + i))).status_code
+        client.post(
+            "/selfserve/reset-ipad", data=dict(GOOD_QUERY, id=str(100 + i))
+        ).status_code
         for i in range(12)
     ]
     assert statuses[:10] == [200] * 10
     assert statuses[10:] == [429, 429]
     assert len(RecordingPopen.calls) == 10
     # Another address is unaffected, and the window moves on.
-    other = client.post("/selfserve/reset-ipad", data=GOOD_QUERY,
-                        environ_base={"REMOTE_ADDR": "10.9.9.9"})
+    other = client.post(
+        "/selfserve/reset-ipad",
+        data=GOOD_QUERY,
+        environ_base={"REMOTE_ADDR": "10.9.9.9"},
+    )
     assert other.status_code == 200
     monkeypatch.setattr(selfserve_receiver, "_now", lambda: 1061.0)
-    assert client.post("/selfserve/reset-ipad", data=dict(GOOD_QUERY, id="200")).status_code == 200
+    assert (
+        client.post(
+            "/selfserve/reset-ipad", data=dict(GOOD_QUERY, id="200")
+        ).status_code
+        == 200
+    )

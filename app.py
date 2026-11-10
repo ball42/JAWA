@@ -46,7 +46,10 @@ from waitress import serve
 from typing import Any, Dict, Tuple, Union
 
 from bin import logger
-from bin.context_processors import inject_common_vars, register_static_cache_bust
+from bin.context_processors import (
+    inject_common_vars,
+    register_static_cache_bust,
+)
 from bin.tokens import SessionEnded, fresh_token, session_ended_response
 from bin.url_safety import safe_path_segment
 from bin.view_modifiers import response
@@ -68,6 +71,7 @@ def _resolve_session_timeout(config: dict) -> int:
     if type(value) is int and value in SESSION_TIMEOUT_CHOICES:
         return value
     return DEFAULT_SESSION_TIMEOUT
+
 
 # Initiate Flask
 app = Flask(__name__)
@@ -421,9 +425,7 @@ def setup() -> Union[Response, str]:
 
         atomic_write_json(server_json_file, server_json)
 
-        return redirect(
-            url_for("success", success_msg="JAWA Setup Complete!")
-        )
+        return redirect(url_for("success", success_msg="JAWA Setup Complete!"))
     else:
         logthis.debug(
             f"[{session.get('url')}] {session.get('username')} - /setup - GET"
@@ -598,8 +600,7 @@ def page_not_found(e) -> Union[Response, str]:
 @app.errorhandler(500)
 def internal_error(e) -> Union[Response, Tuple[str, int]]:
     logthis.exception(
-        f"500 at {request.path} for "
-        f"{session.get('username', 'anonymous')}"
+        f"500 at {request.path} for {session.get('username', 'anonymous')}"
     )
     if "username" in session:
         return (

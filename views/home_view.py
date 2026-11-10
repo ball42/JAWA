@@ -312,9 +312,7 @@ def login() -> Response:
         # Honor a token-fetch failure: get_token() returns a redirect
         # when the token endpoint is unreachable or answers with a
         # non-Jamf body. Ignoring it let login proceed on a failed fetch.
-        token_error = get_token(
-            session["username"], request.form["password"]
-        )
+        token_error = get_token(session["username"], request.form["password"])
         if token_error:
             _log_failed_login(request.form.get("username", ""))
             return token_error

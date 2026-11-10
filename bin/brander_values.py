@@ -11,8 +11,11 @@ import re
 from typing import Any, Dict, Optional
 
 
-def build_values(device: Dict[str, Any], template: Optional[Dict[str, Any]],
-                 allow_person_fields: bool = False) -> Dict[str, Any]:
+def build_values(
+    device: Dict[str, Any],
+    template: Optional[Dict[str, Any]],
+    allow_person_fields: bool = False,
+) -> Dict[str, Any]:
     """Same allowlist as self_serve_brander.build_values (ADR-0013)."""
     general = device.get("general", {})
     location = device.get("location", {})
@@ -44,7 +47,9 @@ def device_family(model_identifier: str) -> str:
     return match.group(0).lower() if match else ""
 
 
-def set_entry(template_set: Dict[str, Any], device: Dict[str, Any]) -> Optional[str]:
+def set_entry(
+    template_set: Dict[str, Any], device: Dict[str, Any]
+) -> Optional[str]:
     """The file a template set picks for this device, or None."""
     templates = template_set.get("templates") or {}
     model = str(device.get("general", {}).get("model_identifier") or "")

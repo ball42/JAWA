@@ -58,9 +58,7 @@ def post(url: str, text: str, log: Optional[logging.Logger] = None) -> None:
                 f"Failure alert was refused with HTTP {resp.status_code}."
             )
     except Exception as err:
-        log.warning(
-            f"Failure alert could not be sent ({type(err).__name__})."
-        )
+        log.warning(f"Failure alert could not be sent ({type(err).__name__}).")
 
 
 # --- Timed (cron) runs ----------------------------------------------------
@@ -91,6 +89,4 @@ def notify_cron_failed(name: str, code: Any) -> None:
         if allowed:
             post(url, alert_text(name, code))
     except Exception as alert_err:
-        logthis.warning(
-            f"Failure alert for {name} was not sent: {alert_err}"
-        )
+        logthis.warning(f"Failure alert for {name} was not sent: {alert_err}")

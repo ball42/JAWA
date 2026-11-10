@@ -10,24 +10,38 @@ from tests.test_selfserve_templates import _SERVICE
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDOR = os.path.join(REPO_ROOT, "static", "css", "vendor")
-ROSTER_CSS = ("/static/css/vendor/roster-web.css", "/static/css/vendor/roster-html.css")
+ROSTER_CSS = (
+    "/static/css/vendor/roster-web.css",
+    "/static/css/vendor/roster-html.css",
+)
 
 
-@pytest.mark.parametrize("name", ["roster-web.css", "roster-html.css", "icons.svg"])
+@pytest.mark.parametrize(
+    "name", ["roster-web.css", "roster-html.css", "icons.svg"]
+)
 def test_vendored_files_carry_their_version_stamp(name):
     with open(os.path.join(VENDOR, name), encoding="utf-8") as handle:
         first = handle.readline()
-    assert re.search(r"roster-bridge \S+ from @blakesteve/roster \S+ " + re.escape(name) + " sha256:", first)
+    assert re.search(
+        r"roster-bridge \S+ from @blakesteve/roster \S+ "
+        + re.escape(name)
+        + " sha256:",
+        first,
+    )
 
 
 def test_vendored_files_keep_the_licence_notice():
     with open(os.path.join(VENDOR, "README.md"), encoding="utf-8") as handle:
         text = handle.read()
-    assert "MIT" in text and "@blakesteve/roster" in text and "CC BY 4.0" in text
+    assert (
+        "MIT" in text and "@blakesteve/roster" in text and "CC BY 4.0" in text
+    )
 
 
 @pytest.mark.parametrize("path", ["/brander/templates", "/brander/preview"])
-def test_brander_pages_load_roster_and_have_no_inline_style(logged_in_client, jawa_env, path):
+def test_brander_pages_load_roster_and_have_no_inline_style(
+    logged_in_client, jawa_env, path
+):
     body = logged_in_client.get(path).get_data(as_text=True)
     for href in ROSTER_CSS:
         assert href in body
@@ -47,9 +61,17 @@ def test_selfserve_pages_load_roster(client, jawa_env):
     assert 'class="rb-btn rb-btn--lg"' in body
 
 
-@pytest.mark.parametrize("state, kind", [("success", "rb-alert--ok"), ("failure", "#circle-exclamation"),
-                                         ("cooldown", "rb-alert--warn")])
-def test_selfserve_results_are_alerts_with_an_icon(logged_in_client, jawa_env, state, kind):
+@pytest.mark.parametrize(
+    "state, kind",
+    [
+        ("success", "rb-alert--ok"),
+        ("failure", "#circle-exclamation"),
+        ("cooldown", "rb-alert--warn"),
+    ],
+)
+def test_selfserve_results_are_alerts_with_an_icon(
+    logged_in_client, jawa_env, state, kind
+):
     jawa_env.add_webhook(dict(_SERVICE))
     body = logged_in_client.get(
         f"/automations/selfserve/reset-ipad/preview?state={state}"
@@ -59,7 +81,10 @@ def test_selfserve_results_are_alerts_with_an_icon(logged_in_client, jawa_env, s
     # the sprite file, and a device page then needs no second request.
     use = re.search(r'use href=(?:"|&#34;|&quot;)#([a-z-]+)', body)
     assert use, "the alert has no inline icon"
-    assert f'symbol id=&#34;{use.group(1)}&#34;' in body or f'symbol id=&quot;{use.group(1)}&quot;' in body
+    assert (
+        f"symbol id=&#34;{use.group(1)}&#34;" in body
+        or f"symbol id=&quot;{use.group(1)}&quot;" in body
+    )
 
 
 @pytest.mark.parametrize("path", ["/dashboard", "/automations", "/templates"])
@@ -69,7 +94,9 @@ def test_console_pages_do_not_load_roster(logged_in_client, jawa_env, path):
 
 
 def _css(name):
-    with open(os.path.join(REPO_ROOT, "static", "css", name), encoding="utf-8") as handle:
+    with open(
+        os.path.join(REPO_ROOT, "static", "css", name), encoding="utf-8"
+    ) as handle:
         return handle.read()
 
 

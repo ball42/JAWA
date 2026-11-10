@@ -25,15 +25,20 @@ BUNDLE = os.path.join(os.path.dirname(__file__), "fixtures", "ewok-bundle")
 
 def test_brander_matches_the_ewok_preview_pixel_for_pixel(jamf):  # noqa: F811
     module = load_brander(
-        template_path=os.path.join(BUNDLE, "brander-ipad-portrait-and-landscape.json")
+        template_path=os.path.join(
+            BUNDLE, "brander-ipad-portrait-and-landscape.json"
+        )
     )
     module.ASSETS_DIR = BUNDLE
     assert run(module) == 0
-    with Image.open(io.BytesIO(jamf.sent_image())) as sent, Image.open(
-        os.path.join(BUNDLE, "expected.png")
-    ) as expected:
+    with (
+        Image.open(io.BytesIO(jamf.sent_image())) as sent,
+        Image.open(os.path.join(BUNDLE, "expected.png")) as expected,
+    ):
         assert sent.size == expected.size
-        assert sent.convert("RGB").tobytes() == expected.convert("RGB").tobytes()
+        assert (
+            sent.convert("RGB").tobytes() == expected.convert("RGB").tobytes()
+        )
 
 
 def test_bundle_readme_names_the_template_file():

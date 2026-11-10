@@ -13,8 +13,10 @@ def _custom_create_data():
     return {
         "custom_name": "prg-test-hook",
         "description": "prg test",
-        "new_file": (io.BytesIO(b"#!/usr/bin/env python3\nprint('hi')\n"),
-                     "hook.py"),
+        "new_file": (
+            io.BytesIO(b"#!/usr/bin/env python3\nprint('hi')\n"),
+            "hook.py",
+        ),
     }
 
 
@@ -88,9 +90,7 @@ def test_smart_group_notice_survives_flash(
         status_code = 201
         text = "<webhook><id>42</id></webhook>"
 
-    monkeypatch.setattr(
-        requests, "post", lambda *a, **k: _XmlResponse()
-    )
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _XmlResponse())
 
     resp = logged_in_client.post(
         "/automations/jamfpro/new",
@@ -131,8 +131,8 @@ def test_success_has_forward_actions_not_history_back(
     # No blind history.back() — it walks into a spent form.
     assert "history.back()" not in body
     # Forward actions present: Create another (for this type) + Dashboard.
-    assert "/automations/custom/new" in body   # Create another
-    assert "/dashboard" in body                # Dashboard
+    assert "/automations/custom/new" in body  # Create another
+    assert "/dashboard" in body  # Dashboard
 
 
 # --- Jamf Pro webhook XML: every interpolated value must be escaped ---
@@ -155,7 +155,11 @@ def test_auth_xml_escapes_the_basic_credentials():
         "<password>s3cret"
     )
     xml = _build_auth_xml(
-        {"choice": "basic", "basic_username": "admin", "basic_password": hostile}
+        {
+            "choice": "basic",
+            "basic_username": "admin",
+            "basic_password": hostile,
+        }
     )
     assert "<url>" not in xml, f"injected a <url> element: {xml}"
     assert "attacker.example" not in xml or "&lt;url&gt;" in xml
@@ -364,7 +368,7 @@ def test_script_masking_covers_shell_and_dict_styles():
         "API_TOKEN=abc123\n"
         'export DB_PASSWORD="hunter2"\n'
         "{'api_key': 'k-999', \"name\": \"keep\"}\n"
-        'token = get_token()\n'
+        "token = get_token()\n"
     )
     masked = mask_secrets(text)
     for leaked in ("abc123", "hunter2", "k-999"):
@@ -566,9 +570,7 @@ def test_cron_detail_has_no_runs_section(
     assert "No runs recorded yet" not in body
 
 
-def test_renaming_an_automation_moves_its_runs(
-    logged_in_client, jawa_env
-):
+def test_renaming_an_automation_moves_its_runs(logged_in_client, jawa_env):
     from bin import data_store
 
     logged_in_client.post(
@@ -589,7 +591,9 @@ def test_renaming_an_automation_moves_its_runs(
 def test_malformed_run_history_does_not_break_pages(
     logged_in_client, jawa_env
 ):
-    jawa_env.runs_file.write_text('{"x": [1], "y": 5, "z": [{"exit_code": 1}]}')
+    jawa_env.runs_file.write_text(
+        '{"x": [1], "y": 5, "z": [{"exit_code": 1}]}'
+    )
     jawa_env.add_webhook(
         {"name": "x", "tag": "custom", "script": "/s/x.sh", "api_key": "null"}
     )
@@ -618,12 +622,14 @@ def test_jamf_create_refreshes_an_expired_token(
 
     def _post(url, **kwargs):
         if url.endswith("/api/v1/auth/keep-alive"):
-            return Resp({"token": "FRESH",
-                         "expires": "2099-01-01T00:00:00.000+0000"})
+            return Resp(
+                {"token": "FRESH", "expires": "2099-01-01T00:00:00.000+0000"}
+            )
         if "/JSSResource/webhooks/id/0" in url:
             sent.append(kwargs["headers"]["Authorization"])
-            return Resp({}, status_code=201,
-                        text="<webhook><id>5</id></webhook>")
+            return Resp(
+                {}, status_code=201, text="<webhook><id>5</id></webhook>"
+            )
         return default_post(url, **kwargs)
 
     monkeypatch.setattr(requests, "post", _post)
@@ -740,13 +746,29 @@ def test_okta_create_sends_the_minted_secret(
 def test_edit_rename_rejects_taken_and_invalid_names(
     logged_in_client, jawa_env, auto_type, field, bad_name, message
 ):
-    jawa_env.add_webhook({"name": "alpha", "tag": auto_type if auto_type != "cron" else "custom",
-                          "event": "ComputerAdded", "script": "x",
-                          "description": "d", "webhook_username": "null",
-                          "webhook_password": "null", "api_key": "null"})
-    jawa_env.add_webhook({"name": "bravo", "tag": "custom", "script": "x",
-                          "description": "d", "webhook_username": "null",
-                          "webhook_password": "null", "api_key": "null"})
+    jawa_env.add_webhook(
+        {
+            "name": "alpha",
+            "tag": auto_type if auto_type != "cron" else "custom",
+            "event": "ComputerAdded",
+            "script": "x",
+            "description": "d",
+            "webhook_username": "null",
+            "webhook_password": "null",
+            "api_key": "null",
+        }
+    )
+    jawa_env.add_webhook(
+        {
+            "name": "bravo",
+            "tag": "custom",
+            "script": "x",
+            "description": "d",
+            "webhook_username": "null",
+            "webhook_password": "null",
+            "api_key": "null",
+        }
+    )
     _add_cron(jawa_env)
     current = "NightlyExport" if auto_type == "cron" else "alpha"
     if auto_type == "cron" and bad_name == "NightlyExport":

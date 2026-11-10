@@ -39,7 +39,9 @@ def clock(monkeypatch):
 
 
 def _post(client, **overrides):
-    return client.post("/selfserve/reset-ipad", data={**GOOD_QUERY, **overrides})
+    return client.post(
+        "/selfserve/reset-ipad", data={**GOOD_QUERY, **overrides}
+    )
 
 
 def test_second_run_inside_the_cooldown_is_refused(
@@ -166,9 +168,9 @@ def test_detail_page_shows_the_cooldown_and_the_reset_button(
     logged_in_client, jawa_env
 ):
     _make_service(jawa_env, cooldown_minutes=5)
-    body = logged_in_client.get(
-        "/automations/selfserve/reset-ipad"
-    ).get_data(as_text=True)
+    body = logged_in_client.get("/automations/selfserve/reset-ipad").get_data(
+        as_text=True
+    )
     assert "5 minutes" in body
     assert 'action="/automations/selfserve/reset-ipad/reset-cooldowns"' in body
 
@@ -191,7 +193,9 @@ def test_edit_rejects_a_bad_cooldown(logged_in_client, jawa_env, value):
     form = {k: entry[k] for k in data_store_page_fields()}
     form.update(device_family="mobile", cooldown_minutes=value)
     logged_in_client.post("/automations/selfserve/reset-ipad/edit", data=form)
-    assert data_store.get_webhook_by_name("reset-ipad")["cooldown_minutes"] == 5
+    assert (
+        data_store.get_webhook_by_name("reset-ipad")["cooldown_minutes"] == 5
+    )
 
 
 def test_edit_form_shows_the_cooldown(logged_in_client, jawa_env):

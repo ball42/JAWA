@@ -23,10 +23,21 @@ SETTINGS = {
     "wallpaper_setting": "WALLPAPER_SETTING",
 }
 # Everything the enable form substituted, kept across a refresh.
-KEPT = ["self.server_url", "self.client_id", "self.client_secret", "EA_ID",
-        "WALLPAPER_SETTING", "ASSETS_DIR", "FONT_PATH", "TEMPLATE_PATH", "MAX_KB",
-        "ALLOW_PERSON_FIELDS"]
-DEFAULTS = {"ALLOW_PERSON_FIELDS": 'ALLOW_PERSON_FIELDS = "no"  # "yes" to allow user.*'}
+KEPT = [
+    "self.server_url",
+    "self.client_id",
+    "self.client_secret",
+    "EA_ID",
+    "WALLPAPER_SETTING",
+    "ASSETS_DIR",
+    "FONT_PATH",
+    "TEMPLATE_PATH",
+    "MAX_KB",
+    "ALLOW_PERSON_FIELDS",
+]
+DEFAULTS = {
+    "ALLOW_PERSON_FIELDS": 'ALLOW_PERSON_FIELDS = "no"  # "yes" to allow user.*'
+}
 MARKER = "def template_wallpaper("
 
 
@@ -37,7 +48,9 @@ class SettingsError(Exception):
 
 
 def _line(name: str) -> re.Pattern:
-    return re.compile(r"^([ \t]*" + re.escape(name) + r" = )(.*?)(\s*#.*)?$", re.M)
+    return re.compile(
+        r"^([ \t]*" + re.escape(name) + r" = )(.*?)(\s*#.*)?$", re.M
+    )
 
 
 def is_brander_script(path: str) -> bool:
@@ -69,10 +82,12 @@ def _validated(updates: Dict[str, str]) -> Dict[str, str]:
     if "template_path" in updates:
         value = str(updates["template_path"]).strip()
         if not value or len(value) > 300 or any(c in value for c in "\r\n\0#"):
-            problems.append("The template must be legacy, a file name or store:<name> (one line, at most 300 characters).")
+            problems.append(
+                "The template must be legacy, a file name or store:<name> (one line, at most 300 characters)."
+            )
         elif value.startswith("store:") and "=" in value:
             try:
-                brander_store.store_set(value[len("store:"):])
+                brander_store.store_set(value[len("store:") :])
             except brander_store.StoreError as err:
                 problems += [f"Store set: {p}." for p in err.problems]
             else:
@@ -82,7 +97,9 @@ def _validated(updates: Dict[str, str]) -> Dict[str, str]:
     if "max_kb" in updates:
         text = str(updates["max_kb"]).strip()
         if not text.isdigit() or not 50 <= int(text) <= 20000:
-            problems.append("The largest wallpaper size must be a whole number of KB from 50 to 20000.")
+            problems.append(
+                "The largest wallpaper size must be a whole number of KB from 50 to 20000."
+            )
         else:
             source["max_kb"] = str(int(text))
     if "allow_person_fields" in updates:
@@ -94,7 +111,9 @@ def _validated(updates: Dict[str, str]) -> Dict[str, str]:
     if "wallpaper_setting" in updates:
         text = str(updates["wallpaper_setting"]).strip()
         if text not in ("1", "2", "3"):
-            problems.append("The wallpaper target must be 1, 2 or 3 (lock screen, home screen, both).")
+            problems.append(
+                "The wallpaper target must be 1, 2 or 3 (lock screen, home screen, both)."
+            )
         else:
             source["wallpaper_setting"] = text
     if problems:
@@ -129,7 +148,11 @@ def write_settings(path: str, updates: Dict[str, str]) -> None:
 
         text, count = pattern.subn(replace, text, count=1)
         if count != 1:
-            raise SettingsError([f"This script has no {SETTINGS[key]} setting; update the script first."])
+            raise SettingsError(
+                [
+                    f"This script has no {SETTINGS[key]} setting; update the script first."
+                ]
+            )
     compile(text, path, "exec")
     _write(path, text)
 
@@ -139,7 +162,9 @@ def refresh_script(path: str, template_source: str) -> None:
     shebang and every substituted value; settings the old script did not
     have get their defaults."""
     if not is_brander_script(path):
-        raise SettingsError(["This automation's script is not a Brander script."])
+        raise SettingsError(
+            ["This automation's script is not a Brander script."]
+        )
     with open(path, encoding="utf-8") as handle:
         old = handle.read()
     with open(template_source, encoding="utf-8") as handle:
@@ -151,10 +176,18 @@ def refresh_script(path: str, template_source: str) -> None:
         found = pattern.search(old)
         line = found.group(0) if found else DEFAULTS.get(name)
         if line is None:
-            raise SettingsError([f"The old script has no {name}; re-enable this Brander instead."])
+            raise SettingsError(
+                [
+                    f"The old script has no {name}; re-enable this Brander instead."
+                ]
+            )
         new = pattern.sub(lambda _: line, new, count=1)
     new = old.splitlines(True)[0] + new.split("\n", 1)[1]
     if "__JAWA_" in new:
-        raise SettingsError(["The updated script still has unfilled settings; re-enable this Brander instead."])
+        raise SettingsError(
+            [
+                "The updated script still has unfilled settings; re-enable this Brander instead."
+            ]
+        )
     compile(new, path, "exec")
     _write(path, new)

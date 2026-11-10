@@ -28,15 +28,13 @@ def _empty_states(body: str) -> str:
     return body[start:end]
 
 
-def test_empty_dashboard_shows_one_start_here_card(
-    logged_in_client, jawa_env
-):
+def test_empty_dashboard_shows_one_start_here_card(logged_in_client, jawa_env):
     body = logged_in_client.get("/dashboard").data.decode()
     assert body.count('class="start-here"') == 1
     assert "Start here" in body
     assert 'class="empty-state"' not in body
     assert "Create one now" not in body
-    card = body[body.index('class="start-here"'):]
+    card = body[body.index('class="start-here"') :]
     card = card[: card.index("</div>")]
     assert card.count("<li>") == 4
     for kind in ("jamfpro", "okta", "custom", "cron"):
@@ -53,9 +51,7 @@ def test_populated_dashboard_has_no_start_here_card(
     assert 'class="start-here"' not in body
 
 
-def test_empty_state_renders_on_a_type_list_page(
-    logged_in_client, jawa_env
-):
+def test_empty_state_renders_on_a_type_list_page(logged_in_client, jawa_env):
     # The macro is shared, so styling it fixes the list pages too.
     states = _empty_states(
         logged_in_client.get("/automations/okta").data.decode()
@@ -149,7 +145,7 @@ def test_dashboard_row_is_one_link_to_the_detail_page(
 ):
     _seed_rows(jawa_env)
     body = logged_in_client.get("/dashboard").data.decode()
-    row = body[body.index('<li class="automation-row">'):]
+    row = body[body.index('<li class="automation-row">') :]
     row = row[: row.index("</li>")]
     assert row.count("<a ") == 1
     assert 'href="/automations/jamfpro/RenameOnEnroll"' in row
@@ -165,7 +161,7 @@ def test_css_has_a_focus_visible_rule_with_outline():
     css = _css()
     assert ":focus-visible {" in css
     start = css.index("/* ===== Keyboard focus")
-    rule = css[start: css.index("/* ===== Buttons", start)]
+    rule = css[start : css.index("/* ===== Buttons", start)]
     assert "outline: 2px solid var(--color-primary)" in rule
     assert "outline-offset: 2px" in rule
 
@@ -188,7 +184,7 @@ def test_detail_buttons_wrap_on_phones(logged_in_client, jawa_env):
     body = logged_in_client.get("/automations/custom/Hook").data.decode()
     assert 'class="action-row mt-4"' in body
     css = _css()
-    media = css[css.index("@media (max-width: 575px) {\n    .action-row"):]
+    media = css[css.index("@media (max-width: 575px) {\n    .action-row") :]
     assert "flex-wrap: wrap" in media
     assert "min-width: 0" in media
     assert ".action-row .btn-danger" in media

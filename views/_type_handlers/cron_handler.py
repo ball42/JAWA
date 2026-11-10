@@ -120,9 +120,7 @@ def _hour_label(hour_id: Any) -> str:
 def _day_label(day_cron: Any) -> str:
     """'Monday' for the weekday code 'MON'."""
     for day in get_time_data().get("days", []):
-        if day.get("cron") == day_cron or str(day.get("id")) == str(
-            day_cron
-        ):
+        if day.get("cron") == day_cron or str(day.get("id")) == str(day_cron):
             return day.get("value", "")
     return str(day_cron)
 
@@ -164,9 +162,7 @@ def _apply_frequency(job: Any, frequency: str, form: Any) -> str:
         job.day.on(day)
         job.hour.on(time_val)
         job.minute.on(0)
-        return (
-            f"On day {day} of every month at {_hour_label(time_val)}"
-        )
+        return f"On day {day} of every month at {_hour_label(time_val)}"
     elif frequency == "custom":
         custom_freq = form.get("customfreq", "")
         try:

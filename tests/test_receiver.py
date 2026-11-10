@@ -136,9 +136,7 @@ def test_api_key_auth_runs_script(client, jawa_env, fake_popen):
     assert len(fake_popen.calls) == 1
 
 
-def test_noauth_webhook_accepts_anonymous_post(
-    client, jawa_env, fake_popen
-):
+def test_noauth_webhook_accepts_anonymous_post(client, jawa_env, fake_popen):
     # Documented posture (ASSESSMENT.md): a webhook stored with the
     # "null" sentinels is open to anyone who knows its name. If this
     # test starts failing, the auth model changed on purpose --
@@ -154,9 +152,7 @@ def test_noauth_webhook_accepts_anonymous_post(
     assert len(fake_popen.calls) == 1
 
 
-def test_custom_output_returns_script_result(
-    client, jawa_env, fake_popen
-):
+def test_custom_output_returns_script_result(client, jawa_env, fake_popen):
     _make_webhook(jawa_env, output=True)
     resp = client.post(
         "/hooks/testhook",
@@ -277,8 +273,7 @@ def test_non_ascii_script_output_does_not_fail_the_request(
         output=True,
     )
     assert resp.status_code == 202, (
-        f"successful script with non-ASCII stdout returned "
-        f"{resp.status_code}"
+        f"successful script with non-ASCII stdout returned {resp.status_code}"
     )
 
 
@@ -583,9 +578,7 @@ def alert_post(jawa_env, monkeypatch):
     jawa_receiver._last_alert_at.clear()
 
 
-def test_failed_run_posts_one_alert(
-    client, jawa_env, monkeypatch, alert_post
-):
+def test_failed_run_posts_one_alert(client, jawa_env, monkeypatch, alert_post):
     _make_webhook(jawa_env)
     monkeypatch.setattr(
         subprocess, "Popen", ConfigurablePopen(stdout=b"boom\n", returncode=3)
@@ -644,9 +637,7 @@ def test_alert_failure_does_not_change_the_response(
     assert len(alert_post.calls) == 1
 
 
-def test_setup_saves_and_renders_failure_alert_url(
-    logged_in_client, jawa_env
-):
+def test_setup_saves_and_renders_failure_alert_url(logged_in_client, jawa_env):
     resp = logged_in_client.post(
         "/setup",
         data={
@@ -672,6 +663,6 @@ def test_setup_saves_and_renders_failure_alert_url(
             "failure_alert_url": "",
         },
     )
-    assert json.loads(jawa_env.server_file.read_text())[
-        "failure_alert_url"
-    ] == ""
+    assert (
+        json.loads(jawa_env.server_file.read_text())["failure_alert_url"] == ""
+    )
