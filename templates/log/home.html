@@ -164,7 +164,8 @@
         flex: 1;
         min-width: 0;
         white-space: pre-wrap;
-        word-break: break-all;
+        /* Break at spaces; split a long token only when it can't fit. */
+        overflow-wrap: anywhere;
     }
     /* Rainbow token colors */
     .log-ts     { color: #78c8e6; }
@@ -188,11 +189,34 @@
         padding-left: 1rem;
         white-space: nowrap;
     }
+    .level-select {
+        display: none;
+        padding: 0.3rem 0.6rem;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: var(--radius-pill);
+        background: rgba(255,255,255,0.06);
+        color: var(--color-code-text);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+    }
+    .level-select option { background: var(--color-code-bg); }
+
+    /* Phones: search, a level menu and Follow on one row; no line numbers. */
+    @media (max-width: 600px) {
+        .log-toolbar .level-filter { display: none; }
+        .level-select { display: block; }
+        .log-toolbar .log-search { min-width: 0; flex-basis: 100%; }
+        .log-count { margin-left: auto; padding-left: 0; }
+        .log-gutter { display: none; }
+        .log-content { font-size: 0.72rem; }
+    }
 </style>
 {% endblock %}
 
+{% block body_class %}page-fill{% endblock %}
+
 {% block content %}
-<div class="hero-section">
+<div class="hero-section hero-section--compact">
     <div class="container">
         <h2>Application Log</h2>
         <p>View, search, and filter JAWA log entries.</p>
@@ -211,13 +235,21 @@
         </div>
     </div>
 </div>
-<div class="container-fluid" style="max-width: 1800px;">
+<div class="container-fluid log-page" style="max-width: 1800px;">
 
 
     <div class="log-container">
         <div class="log-view">
             <div class="log-toolbar">
-                <input type="text" class="log-search" id="logSearch" placeholder="Search logs...">
+                <input type="text" class="log-search" id="logSearch" placeholder="Search logs..." aria-label="Search logs">
+                <select class="level-select" id="levelSelect" aria-label="Log level">
+                    <option value="all">All levels</option>
+                    <option value="debug">Debug</option>
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                    <option value="critical">Critical</option>
+                </select>
                 <button type="button" class="level-filter active" data-level="all" aria-pressed="true" onclick="filterLevel('all', this)"><span class="level-check" aria-hidden="true">✓ </span>ALL</button>
                 <button type="button" class="level-filter" data-level="debug" aria-pressed="false" onclick="filterLevel('debug', this)"><span class="level-check" aria-hidden="true">✓ </span>DEBUG</button>
                 <button type="button" class="level-filter" data-level="info" aria-pressed="false" onclick="filterLevel('info', this)"><span class="level-check" aria-hidden="true">✓ </span>INFO</button>
@@ -342,7 +374,15 @@
         });
         btn.classList.add('active');
         btn.setAttribute('aria-pressed', 'true');
+        // Keep the phone toolbar's level menu in step with the buttons.
+        var select = document.getElementById('levelSelect');
+        if (select) select.value = btn.dataset.level;
     }
+
+    document.getElementById('levelSelect').addEventListener('change', function() {
+        var btn = document.querySelector('.level-filter[data-level="' + this.value + '"]');
+        if (btn) window.filterLevel(this.value, btn);
+    });
 
     // ?q=, ?level= and ?follow=1 make a filtered view bookmarkable and
     // let other pages link to it. replaceState keeps the address bar in

@@ -2031,6 +2031,120 @@ a.btn-form-cancel:visited {
 }
 
 /* ===== Dark mode ===== */
+/* ===== Page layout (J41) ===== */
+/* Compact hero band for tool and short pages: title and subtitle on the
+   left, buttons on the right, about half the height of the full hero. */
+/* The fixed nav is ~72px tall but body padding reserves 56px, so the
+   top padding carries the extra 16px. */
+.hero-section--compact {
+    padding: var(--space-6) 0 var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+.hero-section--compact .container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title cta" "sub cta";
+    column-gap: var(--space-5);
+    align-items: center;
+}
+
+.hero-section--compact h2 {
+    grid-area: title;
+    font-size: 1.5rem;
+    letter-spacing: -0.5px;
+    margin: 0;
+}
+
+.hero-section--compact p {
+    grid-area: sub;
+    font-size: 0.95rem;
+}
+
+.hero-section--compact .hero-cta {
+    grid-area: cta;
+    margin-top: 0;
+}
+
+.hero-section--compact .hero-cta .btn {
+    padding: 0.4rem 1.1rem;
+}
+
+@media (max-width: 767px) {
+    .hero-section--compact {
+        padding: var(--space-5) 0 var(--space-4);
+    }
+
+    .hero-section--compact .container {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "title" "sub" "cta";
+    }
+
+    .hero-section--compact h2 {
+        font-size: 1.35rem;
+    }
+
+    .hero-section--compact .hero-cta {
+        margin-top: var(--space-3);
+        gap: var(--space-2);
+    }
+
+    .hero-section--compact .hero-cta .btn {
+        padding: 0.35rem 0.9rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* A tool page (the log) is exactly the window height: the nav, hero and
+   footer stay put and only its panel scrolls. */
+body.page-fill {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.page-fill .main-content {
+    min-height: 0;
+    padding-bottom: var(--space-4);
+    display: flex;
+    flex-direction: column;
+}
+
+.page-fill .log-page,
+.page-fill .log-container,
+.page-fill .log-view {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.page-fill .log-page {
+    width: 100%;
+}
+
+.page-fill .main-content > .hero-section {
+    flex-shrink: 0;
+}
+
+.page-fill .log-container {
+    margin-bottom: 0;
+}
+
+.page-fill .log-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+}
+
+/* Sign-in: the icon shrinks with the window height so the form, any
+   error message and the footer fit on one screen. */
+.login-icon {
+    max-height: min(310px, 27vh);
+    width: auto;
+}
+
 @media (prefers-color-scheme: dark) {
     :root {
         --color-text: #f3e8dc;
