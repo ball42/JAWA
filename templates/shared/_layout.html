@@ -50,7 +50,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 </head>
 
-<body class="jawa-bg d-flex flex-column">
+<body class="jawa-bg d-flex flex-column {% block body_class %}{% endblock %}">
 
 {% if username %}
     <nav class="navbar fixed-top navbar-dark navbar-expand-md">
