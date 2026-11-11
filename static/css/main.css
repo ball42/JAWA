@@ -1731,6 +1731,43 @@ a.btn-hero-secondary:visited {
     padding-right: 5rem;
 }
 
+/* Send sample event: the device the sample names, then the payload. */
+.sample-device {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.5rem 1rem;
+    max-width: 48rem;
+    margin: 0 0 0.5rem;
+}
+
+.sample-device legend {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+}
+
+.sample-device-udid {
+    grid-column: 1 / -1;
+}
+
+.sample-device-jssID input,
+.sample-device-serialNumber input,
+.sample-device-udid input {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+}
+
+.sample-device .form-label {
+    font-size: 0.88rem;
+    font-weight: 500;
+    margin-bottom: 0.15rem;
+}
+
+.sample-payload {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    max-width: 48rem;
+}
+
 .script-note {
     color: var(--color-text-secondary);
     font-size: 0.85rem;

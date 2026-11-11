@@ -528,7 +528,10 @@ Find JAWA releases [here.](https://github.com/jamf/JAWA/releases)
       Delivery checks the device first, rate-limits, and only shows personal fields when both
       the template and the admin allow them. Adds Brander (Asset Tag Watch), a timed template.
     - Each automation's page shows what it does, when it runs, when it last ran and how that run
-      went, and the script it runs. Send a sample event to a Jamf Pro automation from its page.
+      went, and the script it runs. Send a sample event to a Jamf Pro automation from its page,
+      choosing the device it names (Jamf Pro ID, serial number, UDID, device name) or editing the
+      whole payload. The sample's own ids are made up, and a script that calls Jamf Pro acts on
+      the real device with that id, so set a test device first. JAWA remembers it per automation.
     - **Failure alerts**: post a chat message when an automation's script fails, including timed
       automations (`failure_alert_url` in Setup).
     - **Admin allow-list** in Setup limits console sign-in to named Jamf Pro accounts. An empty

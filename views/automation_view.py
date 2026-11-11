@@ -26,10 +26,11 @@
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+import copy
 import json
 import os
 import re
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from flask import (
     Blueprint,
@@ -279,6 +280,7 @@ def detail(auto_type: str, name: str) -> Union[Response, str]:
         script=_read_script(automation.get("script")),
         runs=_masked_runs(name),
         jamf_state=jamf_state,
+        sample=sample_form(automation) if auto_type == "jamfpro" else None,
         smart_group_events=SMART_GROUP_EVENTS,
     )
 
@@ -378,6 +380,118 @@ SAMPLE_UNSUPPORTED = (
     "Sample events can only be sent to Jamf Pro and custom automations."
 )
 
+# Device keys an admin can set on a Jamf Pro sample event, when the
+# event's sample has them. The bundled ids are made up, and a script
+# that calls Jamf Pro with one acts on whatever real device has it.
+SAMPLE_DEVICE_FIELDS = (
+    ("jssID", "Jamf Pro ID"),
+    ("serialNumber", "Serial number"),
+    ("deviceName", "Device name"),
+    ("udid", "UDID"),
+)
+SAMPLE_VALUE_LIMIT = 200
+
+
+class SampleInputError(ValueError):
+    """The admin's sample payload or device fields cannot be used."""
+
+    def __init__(self, message: str, title: str = "Invalid device") -> None:
+        super().__init__(message)
+        self.title = title
+
+
+def _jamf_sample(automation: Dict) -> Optional[Dict]:
+    """The event's bundled sample with the remembered device applied."""
+    example = data_store.get_webhook_schemas()["examples"].get(
+        automation.get("event", "")
+    )
+    if not example:
+        return None
+    payload = copy.deepcopy(example)
+    event = payload.get("event")
+    if isinstance(event, dict):
+        for key, value in (automation.get("sample_device") or {}).items():
+            if key in event:
+                event[key] = value
+    return payload
+
+
+def sample_form(automation: Dict) -> Optional[Dict]:
+    """Device fields and payload JSON for a Jamf Pro sample event form."""
+    payload = _jamf_sample(automation)
+    if payload is None:
+        return None
+    event = payload.get("event")
+    event = event if isinstance(event, dict) else {}
+    fields = [
+        {"key": key, "label": label, "value": event[key]}
+        for key, label in SAMPLE_DEVICE_FIELDS
+        if key in event
+    ]
+    return {"fields": fields, "json": json.dumps(payload, indent=2)}
+
+
+def _apply_device_fields(payload: Dict, form: Any) -> Dict:
+    """Write the posted device fields into payload["event"].
+
+    Returns the values applied, for remembering. A blank field keeps the
+    payload's value. Raises SampleInputError on a bad value.
+    """
+    event = payload.get("event")
+    if not isinstance(event, dict):
+        return {}
+    applied = {}
+    for key, label in SAMPLE_DEVICE_FIELDS:
+        raw = (form.get(f"device_{key}") or "").strip()
+        if not raw or key not in event:
+            continue
+        if len(raw) > SAMPLE_VALUE_LIMIT:
+            raise SampleInputError(f"{label} is too long.")
+        if key == "jssID":
+            if not raw.isascii() or not raw.isdigit():
+                raise SampleInputError(
+                    "Jamf Pro ID must be a whole number, such as 1547."
+                )
+            value = int(raw)
+        else:
+            value = raw
+        event[key] = value
+        applied[key] = value
+    return applied
+
+
+def _jamf_sample_payload(automation: Dict, form: Any) -> Tuple[Dict, Dict]:
+    """The payload to send and the device values to remember."""
+    pasted = (form.get("payload") or "").strip()
+    if pasted:
+        try:
+            payload = json.loads(pasted)
+        except ValueError:
+            raise SampleInputError(
+                "The sample body is not valid JSON.", title="Invalid JSON"
+            )
+        if not isinstance(payload, dict):
+            raise SampleInputError(
+                "The sample body must be a JSON object, in braces.",
+                title="Invalid JSON",
+            )
+    else:
+        payload = _jamf_sample(automation)
+    return payload, _apply_device_fields(payload, form)
+
+
+def _remember_sample_device(automation: Dict, applied: Dict) -> None:
+    """Save the device the admin used, so the form starts with it."""
+    if not applied:
+        return
+    remembered = dict(automation.get("sample_device") or {})
+    remembered.update(applied)
+    webhooks = get_all_webhooks()
+    data_store.update_webhook_in_list(
+        webhooks, automation["name"], {"sample_device": remembered}
+    )
+    save_all_webhooks(webhooks)
+
 
 @blueprint.route("/automations/<auto_type>/<name>/test", methods=["POST"])
 @login_required
@@ -397,8 +511,7 @@ def send_sample(auto_type: str, name: str) -> Union[Response, str]:
     back = f"/automations/{auto_type}/{name}"
     if auto_type == "jamfpro":
         event = automation.get("event", "")
-        payload = data_store.get_webhook_schemas()["examples"].get(event)
-        if not payload:
+        if _jamf_sample(automation) is None:
             return render_template(
                 "automations/test_result.html",
                 handler=handler,
@@ -408,6 +521,16 @@ def send_sample(auto_type: str, name: str) -> Union[Response, str]:
                 event=event,
                 back=back,
             )
+        try:
+            payload, applied = _jamf_sample_payload(automation, request.form)
+        except SampleInputError as err:
+            return _error_page(
+                err.title,
+                str(err),
+                link=back,
+                link_text="Back to the automation",
+            )
+        _remember_sample_device(automation, applied)
     else:
         pasted = (request.form.get("payload") or "").strip()
         if pasted:
